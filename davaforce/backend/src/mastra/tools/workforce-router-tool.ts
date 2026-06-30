@@ -16,12 +16,12 @@ import {
 type RouterIntent = WorkforceRouterOutput["route"]["intent"];
 type ExecutionStep = WorkforceRouterOutput["route"]["executionPlan"][number];
 
-const ALL_AGENTS = [
-  "Opportunity Assessment Agent",
-  "Resource Supply Agent",
-  "Team Builder Agent",
-  "Risk & Insights Agent",
-  "Approval & Decision Agent",
+const SPECIALIST_TOOLS = [
+  "Opportunity Assessment Tool",
+  "Resource Supply Tool",
+  "Team Builder Tool",
+  "Risk & Insights Tool",
+  "Approval & Decision Tool",
 ];
 
 const includesAny = (value: string, terms: string[]) => terms.some((term) => value.includes(term));
@@ -48,6 +48,10 @@ const isUnsafeRequest = (value: string) =>
 
 const asksUnsupportedEvidenceField = (value: string) =>
   /\b(salary|compensation|ctc|pay|passport|personal email|personal e-mail|private email|phone number|mobile number)\b/i.test(value);
+
+const asksPeopleSkillLookup = (value: string) =>
+  /\b(list|show|give|find|who|which|people|persons|employees?|resources?)\b/i.test(value) &&
+  /\b(skill|skills|skilled|knows?|experience|experienced|with)\b/i.test(value);
 
 const classifyIntent = (input: WorkforceRouterInput) => {
   if (input.intentOverride) {
@@ -154,6 +158,7 @@ const classifyIntent = (input: WorkforceRouterInput) => {
   }
 
   if (
+    asksPeopleSkillLookup(question) ||
     includesAny(question, [
       "30 days",
       "60 days",
@@ -165,6 +170,8 @@ const classifyIntent = (input: WorkforceRouterInput) => {
       "candidates",
       "capacity",
       "find people",
+      "list people",
+      "people with skill",
       "partial capacity",
       "resource supply",
       "supply",
@@ -225,7 +232,7 @@ const classifyIntent = (input: WorkforceRouterInput) => {
   };
 };
 
-const agentsForIntent = (intent: RouterIntent) => {
+const toolsForIntent = (intent: RouterIntent) => {
   if (intent === "blocked" || intent === "clarification") {
     return [];
   }
@@ -233,69 +240,69 @@ const agentsForIntent = (intent: RouterIntent) => {
     return [];
   }
   if (intent === "opportunity_assessment") {
-    return ["Opportunity Assessment Agent"];
+    return ["Opportunity Assessment Tool"];
   }
   if (intent === "resource_supply") {
-    return ["Resource Supply Agent"];
+    return ["Resource Supply Tool"];
   }
   if (intent === "team_builder") {
-    return ["Opportunity Assessment Agent", "Resource Supply Agent", "Team Builder Agent"];
+    return ["Opportunity Assessment Tool", "Resource Supply Tool", "Team Builder Tool"];
   }
   if (intent === "risk_insights") {
-    return ["Opportunity Assessment Agent", "Resource Supply Agent", "Team Builder Agent", "Risk & Insights Agent"];
+    return ["Opportunity Assessment Tool", "Resource Supply Tool", "Team Builder Tool", "Risk & Insights Tool"];
   }
-  return ALL_AGENTS;
+  return SPECIALIST_TOOLS;
 };
 
 const planForIntent = (intent: RouterIntent): ExecutionStep[] => {
-  const agents = agentsForIntent(intent);
+  const tools = toolsForIntent(intent);
   const plan: ExecutionStep[] = [];
 
-  if (agents.includes("Opportunity Assessment Agent")) {
+  if (tools.includes("Opportunity Assessment Tool")) {
     plan.push({
       order: plan.length + 1,
-      agent: "Opportunity Assessment Agent",
+      agent: "Opportunity Assessment Tool",
       purpose: "Normalize demand into opportunity, roles, skills, location, timeline, and FTE requirements.",
       dependsOn: [],
     });
   }
 
-  if (agents.includes("Resource Supply Agent")) {
+  if (tools.includes("Resource Supply Tool")) {
     plan.push({
       order: plan.length + 1,
-      agent: "Resource Supply Agent",
+      agent: "Resource Supply Tool",
       purpose:
         intent === "resource_supply"
           ? "Answer the supply question directly using availability, bench, skills, capacity, and EWA evidence."
           : "Find supply for each assessed opportunity role before team construction.",
-      dependsOn: intent === "resource_supply" ? [] : ["Opportunity Assessment Agent"],
+      dependsOn: intent === "resource_supply" ? [] : ["Opportunity Assessment Tool"],
     });
   }
 
-  if (agents.includes("Team Builder Agent")) {
+  if (tools.includes("Team Builder Tool")) {
     plan.push({
       order: plan.length + 1,
-      agent: "Team Builder Agent",
+      agent: "Team Builder Tool",
       purpose: "Combine assessed demand and role-wise supply into Best Fit, Fastest Available, and Balanced team options.",
-      dependsOn: ["Opportunity Assessment Agent", "Resource Supply Agent"],
+      dependsOn: ["Opportunity Assessment Tool", "Resource Supply Tool"],
     });
   }
 
-  if (agents.includes("Risk & Insights Agent")) {
+  if (tools.includes("Risk & Insights Tool")) {
     plan.push({
       order: plan.length + 1,
-      agent: "Risk & Insights Agent",
+      agent: "Risk & Insights Tool",
       purpose: "Evaluate team options for confidence, capability gaps, availability risk, FTE gaps, and impact.",
-      dependsOn: ["Team Builder Agent"],
+      dependsOn: ["Team Builder Tool"],
     });
   }
 
-  if (agents.includes("Approval & Decision Agent")) {
+  if (tools.includes("Approval & Decision Tool")) {
     plan.push({
       order: plan.length + 1,
-      agent: "Approval & Decision Agent",
+      agent: "Approval & Decision Tool",
       purpose: "Prepare the human approval package with EWA status, blockers, conditions, and next actions.",
-      dependsOn: ["Risk & Insights Agent"],
+      dependsOn: ["Risk & Insights Tool"],
     });
   }
 
@@ -392,14 +399,14 @@ export function routeWorkforceQuestion(input: WorkforceRouterInput): WorkforceRo
         /\b(phone number|mobile number)\b/i.test(query) ? "phone number" : null,
       ].filter((field): field is string => Boolean(field))
     : [];
-  const agentsToRun = agentsForIntent(intent);
+  const toolsToRun = toolsForIntent(intent);
   const baseRoute = {
     intent,
     confidence: classified.confidence,
     reason: classified.reason,
-    plannedAgentPath: agentsToRun,
-    agentsToRun,
-    skippedAgents: ALL_AGENTS.filter((agent) => !agentsToRun.includes(agent)),
+    plannedAgentPath: toolsToRun,
+    agentsToRun: toolsToRun,
+    skippedAgents: SPECIALIST_TOOLS.filter((tool) => !toolsToRun.includes(tool)),
     executionPlan: planForIntent(intent),
   };
 
@@ -594,7 +601,7 @@ export function routeWorkforceQuestion(input: WorkforceRouterInput): WorkforceRo
       "Workforce router completed.",
     evidence: [
       `Router classified the question as ${intent} with ${classified.confidence} confidence.`,
-      `Planned agent path: ${agentsToRun.join(" -> ")}.`,
+      `Planned tool path: ${toolsToRun.join(" -> ")}.`,
       "Execution mode is tool_orchestrated: deterministic tool functions produced the DB-backed JSON output.",
       intent === "resource_supply"
         ? "Resource Supply was run as a standalone route."
@@ -615,7 +622,7 @@ export function routeWorkforceQuestion(input: WorkforceRouterInput): WorkforceRo
 export const workforceRouterTool = createTool({
   id: "workforce-router",
   description:
-    "Route a workforce planning question to the minimum required agent chain and return the selected JSON output with routing evidence.",
+    "Route a workforce planning question to the minimum required tool chain and return the selected JSON output with routing evidence.",
   inputSchema: workforceRouterInputSchema,
   outputSchema: workforceRouterOutputSchema,
   execute: async (input) => routeWorkforceQuestion(input),

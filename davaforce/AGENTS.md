@@ -6,7 +6,7 @@ This is the primary entrypoint for Codex and other agents working on workforce p
 
 ## Core rule
 
-Prefer agent tools in `backend/src/lib/agent-tools/` over freeform LLM reasoning whenever the answer depends on:
+Prefer deterministic workforce sub-tools in `backend/src/lib/agent-tools/` over freeform LLM reasoning whenever the answer depends on:
 
 - availability or bench status
 - 30/60/90 day capacity
@@ -17,13 +17,13 @@ Prefer agent tools in `backend/src/lib/agent-tools/` over freeform LLM reasoning
 - EWA recommendations
 - structured user-facing explanations
 
-Do not ask an LLM to inspect the normalized SQLite dataset directly when an agent tool can answer the question.
+Do not ask an LLM to inspect the normalized SQLite dataset directly when a tool can answer the question.
 
 ## Start here
 
 1. Read `docs/agent-tools/README.md` for the routing map and execution patterns.
-2. Import agent tools from `backend/src/lib/agent-tools/index.ts`.
-3. Open the specific tool doc in `docs/agent-tools/` before building a new tool, workflow step, or agent behavior.
+2. Import sub-tools from `backend/src/lib/agent-tools/index.ts`.
+3. Open the specific tool doc in `docs/agent-tools/` before building a new tool, workflow step, or router behavior.
 
 ## Quick routing
 
@@ -45,6 +45,6 @@ Do not ask an LLM to inspect the normalized SQLite dataset directly when an agen
 
 ## Key locations
 
-- Detailed agent docs: `docs/agent-tools/README.md`
-- Agent-tool code: `backend/src/lib/agent-tools/`
+- Detailed sub-tool docs: `docs/agent-tools/README.md`
+- Sub-tool code: `backend/src/lib/agent-tools/`
 - Local code guide: `backend/src/lib/agent-tools/AGENTS.md`

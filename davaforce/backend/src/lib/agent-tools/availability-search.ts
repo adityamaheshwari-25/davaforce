@@ -235,7 +235,7 @@ export function availabilitySearch(input: AvailabilitySearchInput): Availability
       evidence: [
         `Availability searched in ${source.dbPath}.`,
         `Target date ${targetDate} derived from a ${availabilityWindowDays}-day window.`,
-      `Applied agent-tool filters on FTE, location, discipline, grade, and domain.`,
+      `Applied tool filters on FTE, location, discipline, grade, and domain.`,
         `Returned ${candidates.length} candidate(s).`,
       ],
     };

@@ -22,6 +22,12 @@ import {
   WORKFORCE_UPLOAD_STEP_LABELS,
 } from "../lib/workforce-upload-progress";
 import { verifyImportedDatabase } from "../lib/workforce-verify";
+import {
+  readDatasetSchemaValidation,
+  validateDatasetSchema,
+  type WorkforceSchemaValidationInput,
+} from "../lib/workforce-schema-validation";
+import { SchemaValidationAlreadyCompletedError } from "../lib/workforce-schema-validation-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -340,6 +346,49 @@ export async function GET_DOWNLOAD(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to download workbook.";
     return json({ status: "failure", error: message }, 400);
+  }
+}
+
+export async function GET_SCHEMA_VALIDATION(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const datasetId = searchParams.get("datasetId")?.trim();
+    const userId = searchParams.get("userId")?.trim();
+
+    if (!userId || !datasetId) {
+      return json({ status: "failure", error: "userId and datasetId are required." }, 400);
+    }
+
+    assertDummyUserExists(userId);
+    const result = readDatasetSchemaValidation(datasetId, userId);
+    return json({ status: "success", ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load dataset schema validation.";
+    return json({ status: "failure", error: message }, 400);
+  }
+}
+
+export async function POST_SCHEMA_VALIDATION(request: Request) {
+  try {
+    const body = (await request.json()) as Partial<WorkforceSchemaValidationInput>;
+    const datasetId = body.datasetId?.trim();
+    const userId = body.userId?.trim();
+
+    if (!datasetId || !userId) {
+      return json({ status: "failure", error: "userId and datasetId are required." }, 400);
+    }
+
+    assertDummyUserExists(userId);
+    const result = validateDatasetSchema({
+      datasetId,
+      userId,
+      tables: Array.isArray(body.tables) ? body.tables : [],
+    });
+    return json({ status: "success", ...result });
+  } catch (error) {
+    const status = error instanceof SchemaValidationAlreadyCompletedError ? 409 : 400;
+    const message = error instanceof Error ? error.message : "Failed to validate dataset schema.";
+    return json({ status: "failure", error: message }, status);
   }
 }
 

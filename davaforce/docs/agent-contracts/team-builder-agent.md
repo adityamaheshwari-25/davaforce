@@ -1,4 +1,4 @@
-# Team Builder Agent Contract
+# Team Builder Tool Contract
 
 ## Purpose
 
@@ -6,7 +6,6 @@ Build role-wise candidate pools and team-level staffing options from opportunity
 
 ## Tool Source
 
-- Agent: `teamBuilderAgent`
 - Tool: `teamBuilderTool`
 - Source schema: `teamBuilderOutputSchema`
 

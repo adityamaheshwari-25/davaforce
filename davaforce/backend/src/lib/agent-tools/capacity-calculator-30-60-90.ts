@@ -149,7 +149,7 @@ export function capacityCalculator30_60_90(input: CapacityCalculatorInput): Capa
     benchMovement,
     scenarioTargets,
     evidence: [
-      `Calculated 0, 30, 60, and 90 day capacity windows using agent-tool rules.`,
+      `Calculated 0, 30, 60, and 90 day capacity windows using tool rules.`,
       `Bench movement trend loaded from ${perWindow[0].source.dbPath}.`,
       `Scenario target status loaded for ${scenarioTargets.length} target(s).`,
     ],

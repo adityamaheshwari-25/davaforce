@@ -62,6 +62,7 @@ export function WorkspaceTopNav() {
     window.localStorage.removeItem("workforceUser");
     window.localStorage.removeItem("workforceDatasetId");
     window.localStorage.removeItem("workforceDatasetName");
+    window.localStorage.removeItem("workforceDatasetSchemaValidated");
     window.localStorage.removeItem("workforcePrompt");
     router.push("/");
   };

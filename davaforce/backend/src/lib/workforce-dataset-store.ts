@@ -4,6 +4,12 @@ import { extname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { WorkforceStaticDashboardSnapshot } from "./workforce-static-dashboard-cache";
 import { importExcelToSqlite } from "./workforce-import";
+import {
+  normalizeSchemaValidationState,
+  schemaValidationSummary,
+  type WorkforceSchemaValidationState,
+  type WorkforceSchemaValidationSummary,
+} from "./workforce-schema-validation-types";
 import type { WorkforceUploadProgressUpdate } from "./workforce-upload-progress";
 import { ROOT_DIR, text, utcNowIsoWithOffset } from "./workforce-data-utils";
 
@@ -45,6 +51,7 @@ export type WorkforceDatasetRecord = {
   conversationId: string | null;
   sourceSha256: string;
   staticDashboard?: WorkforceStaticDashboardSnapshot | null;
+  schemaValidation?: WorkforceSchemaValidationState | null;
 };
 
 export type WorkforceDatasetClientRecord = {
@@ -57,6 +64,7 @@ export type WorkforceDatasetClientRecord = {
   createdAt: string;
   importCounts: Record<string, number>;
   conversationId: string | null;
+  schemaValidation: WorkforceSchemaValidationSummary;
 };
 
 export type CreateDatasetFromUploadOptions = {
@@ -224,6 +232,7 @@ const normalizeDatasetRecord = (value: unknown): WorkforceDatasetRecord => {
   return {
     ...record,
     conversationId: text(record.conversationId) || legacyConversationIds.at(-1) || null,
+    schemaValidation: normalizeSchemaValidationState(record.schemaValidation),
   };
 };
 
@@ -237,6 +246,7 @@ export const toClientDatasetRecord = (record: WorkforceDatasetRecord): Workforce
   createdAt: record.createdAt,
   importCounts: record.importCounts,
   conversationId: record.conversationId,
+  schemaValidation: schemaValidationSummary(record.schemaValidation),
 });
 
 export const writeDatasetRecord = (record: WorkforceDatasetRecord) => {
@@ -445,6 +455,7 @@ export async function createDatasetFromUpload(
       conversationId: text(options.conversationId) || createConversationId(),
       sourceSha256: createHash("sha256").update(bytes).digest("hex"),
       staticDashboard: null,
+      schemaValidation: null,
     };
 
     writeDatasetRecord(record);

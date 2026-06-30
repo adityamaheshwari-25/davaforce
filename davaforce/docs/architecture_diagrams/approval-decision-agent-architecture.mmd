@@ -1,7 +1,6 @@
 flowchart TD
     caller["Router / API / Planner / Approver<br/>approval package or EWA review request"]
-    agent["Approval & Decision Agent<br/>Mastra Agent<br/>approvalDecisionAgent"]
-    tool["approvalDecisionTool<br/>buildApprovalDecision()"]
+    tool["Approval & Decision Tool<br/>Mastra Tool<br/>approvalDecisionTool<br/>buildApprovalDecision()"]
 
     subgraph upstream["Required Upstream Evidence"]
         direction TB
@@ -26,7 +25,7 @@ flowchart TD
     outputJson["ApprovalDecisionOutput JSON<br/>selectedOption, riskSummary,<br/>approvalChecklist, ewaSummary,<br/>approvalPackage, nextActions, evidence"]
     downstream["Downstream Consumers<br/>Router final response,<br/>EWA review UI, approver package"]
 
-    caller --> agent --> tool --> source --> db
+    caller --> tool --> source --> db
     tool --> teamBuilder --> db
     tool --> riskInsights --> db
     tool --> ewaQuery --> db
@@ -37,7 +36,6 @@ flowchart TD
     outputJson --> downstream
 
     classDef actor fill:#fff7e6,stroke:#c57a00,color:#2b1d00,stroke-width:1px;
-    classDef agentNode fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
     classDef toolNode fill:#fff4e8,stroke:#c96b20,color:#402100,stroke-width:1px;
     classDef control fill:#f4f0ff,stroke:#7b61c9,color:#22173a,stroke-width:1px;
     classDef data fill:#f2f4f7,stroke:#667085,color:#1d2939,stroke-width:1px;
@@ -45,7 +43,6 @@ flowchart TD
     classDef guardrailNode fill:#fff8d6,stroke:#b58b00,color:#3a2e00,stroke-width:1px;
 
     class caller actor;
-    class agent agentNode;
     class tool,teamBuilder,riskInsights toolNode;
     class source,ewaQuery,selectOption,compareEwa,blockers,checklist,decision,package control;
     class guardrail guardrailNode;

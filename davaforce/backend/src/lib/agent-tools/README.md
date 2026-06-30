@@ -1,6 +1,6 @@
-# Agent Tools Layer
+# Workforce Sub-Tools Layer
 
-This folder contains the agent tools that workforce agents should prefer over freeform database reasoning.
+This folder contains deterministic sub-tools that the main workforce tools should prefer over freeform database reasoning.
 
 ## Entry points
 
@@ -19,6 +19,6 @@ This folder contains the agent tools that workforce agents should prefer over fr
 - `ewaRecommendationBuilder`
 - `explanationGenerator`
 
-## Agent guidance
+## Tool Guidance
 
 Detailed tool-selection notes live in `docs/agent-tools/README.md`.

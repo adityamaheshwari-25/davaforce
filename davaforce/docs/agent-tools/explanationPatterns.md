@@ -1,6 +1,6 @@
 # Explanation Patterns
 
-Use `explanationGenerator()` after agent tools, not before.
+Use `explanationGenerator()` after workforce tools or sub-tools, not before.
 
 ## Preferred patterns
 

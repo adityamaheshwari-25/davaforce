@@ -1,4 +1,4 @@
-# Resource Supply Agent Contract
+# Resource Supply Tool Contract
 
 ## Purpose
 
@@ -6,7 +6,6 @@ Find workforce supply, availability, bench capacity, partial capacity, weekly be
 
 ## Tool Source
 
-- Agent: `resourceSupplyAgent`
 - Tool: `resourceSupplyTool`
 - Source schema: `resourceSupplyOutputSchema`
 
@@ -125,4 +124,4 @@ Find workforce supply, availability, bench capacity, partial capacity, weekly be
 
 - `candidates` are strict matches.
 - `nearMatches` are returned when strict filters remove all useful candidates.
-- This agent must not assemble final team options.
+- This tool must not assemble final team options.

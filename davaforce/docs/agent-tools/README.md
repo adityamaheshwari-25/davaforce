@@ -1,12 +1,12 @@
-# Agent Tools Guide
+# Workforce Sub-Tools Guide
 
-This directory is the detailed reference for the agent-tools layer used by workforce agents.
+This directory is the detailed reference for the lower-level workforce sub-tools used by the main routed tools.
 
-For discovery, agents should start at the repo root `AGENTS.md`. For local code guidance, use `backend/src/lib/agent-tools/AGENTS.md`.
+For discovery, start at the repo root `AGENTS.md`. For local code guidance, use `backend/src/lib/agent-tools/AGENTS.md`.
 
 ## Required rule
 
-Use the agent tools for retrieval, filtering, scoring, team construction, risk checks, EWA recommendation building, and explanation shaping.
+Use these sub-tools for retrieval, filtering, scoring, team construction, risk checks, EWA recommendation building, and explanation shaping.
 
 Do not ask an LLM to inspect the normalized SQLite database directly when one of these tools can answer the question.
 
@@ -19,7 +19,7 @@ Do not ask an LLM to inspect the normalized SQLite database directly when one of
 - Team construction across one or more roles -> `teamOptionBuilder()`
 - Gap, overlap, EWA, and partial-capacity risk -> `riskAnalyzer()`
 - Approval and EWA action recommendations -> `ewaRecommendationBuilder()`
-- Agent-ready explanation or summary of tool output -> `explanationGenerator()`
+- Tool-ready explanation or summary of tool output -> `explanationGenerator()`
 
 ## Standard flows
 

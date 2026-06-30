@@ -1,7 +1,6 @@
 flowchart TD
     caller["Router / API / Planner<br/>opportunityId or query,<br/>team-risk question"]
-    agent["Risk & Insights Agent<br/>Mastra Agent<br/>riskInsightsAgent"]
-    tool["riskInsightsTool<br/>buildRiskInsights()"]
+    tool["Risk & Insights Tool<br/>Mastra Tool<br/>riskInsightsTool<br/>buildRiskInsights()"]
 
     subgraph upstream["Required Upstream Evidence"]
         direction TB
@@ -23,7 +22,7 @@ flowchart TD
     outputJson["RiskInsightsOutput JSON<br/>overallRiskLevel, summary,<br/>optionAnalyses, roleAnalyses,<br/>capabilityGaps, availabilityRisks,<br/>impact, nextActions, evidence"]
     downstream["Downstream Consumers<br/>Approval & Decision package,<br/>Router final response"]
 
-    caller --> agent --> tool --> teamBuilder --> db
+    caller --> tool --> teamBuilder --> db
     teamBuilder --> candidateMap
     candidateMap --> optionAnalysis
     candidateMap --> roleAnalysis
@@ -33,14 +32,12 @@ flowchart TD
     outputJson --> downstream
 
     classDef actor fill:#fff7e6,stroke:#c57a00,color:#2b1d00,stroke-width:1px;
-    classDef agentNode fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
     classDef toolNode fill:#fff4e8,stroke:#c96b20,color:#402100,stroke-width:1px;
     classDef control fill:#f4f0ff,stroke:#7b61c9,color:#22173a,stroke-width:1px;
     classDef data fill:#f2f4f7,stroke:#667085,color:#1d2939,stroke-width:1px;
     classDef outputNode fill:#eef5ff,stroke:#356ae6,color:#10213a,stroke-width:1px;
 
     class caller actor;
-    class agent agentNode;
     class tool,teamBuilder toolNode;
     class candidateMap,optionAnalysis,roleAnalysis,splitRisks,impact,baseline,nextActions control;
     class db data;

@@ -49,6 +49,7 @@ import {
   numberFormat,
 } from "@/features/dashboard/components/dashboard-widgets";
 import type { DashboardFailure, DashboardPayload } from "@/features/dashboard/dashboard-types";
+import { isDatasetSchemaValidated } from "@/lib/workforce-schema-validation";
 
 type LoginUser = {
   userId: string;
@@ -137,6 +138,14 @@ export default function Dashboard() {
         setUserId(user.userId);
         setDatasetId("");
         router.replace("/?action=upload");
+        return;
+      }
+
+      if (!(await isDatasetSchemaValidated(user.userId, datasetId))) {
+        setDashboard(null);
+        setUserId(user.userId);
+        setDatasetId(datasetId);
+        router.replace("/validate");
         return;
       }
 

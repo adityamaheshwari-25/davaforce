@@ -1,4 +1,4 @@
-# Opportunity Assessment Agent Contract
+# Opportunity Assessment Tool Contract
 
 ## Purpose
 
@@ -6,7 +6,6 @@ Normalize staffing demand from a user query or existing opportunity record into 
 
 ## Tool Source
 
-- Agent: `opportunityAssessmentAgent`
 - Tool: `opportunityAssessmentTool`
 - Source schema: `opportunityAssessmentOutputSchema`
 
@@ -119,6 +118,6 @@ Normalize staffing demand from a user query or existing opportunity record into 
 
 ## Notes
 
-- This agent must not recommend candidates or teams.
+- This tool must not recommend candidates or teams.
 - Confirmed DB requirements stay separate from extracted query signals.
 - `opportunity` can be `null` when no opportunity is selected.
