@@ -34,6 +34,19 @@ const unique = (values: string[]) => [...new Set(values.map((value) => value.tri
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const containsSignal = (haystack: string, signal: string) =>
   new RegExp(`(^|[^a-z0-9+#])${escapeRegExp(signal.toLowerCase())}([^a-z0-9+#]|$)`).test(haystack);
+const signalTokens = (value: string) =>
+  unique(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9+#]+/g)
+      .filter((token) => token.length >= 3),
+  );
+const containsSignalOrToken = (haystack: string, signal: string) => {
+  const normalizedSignal = signal.toLowerCase();
+  if (!normalizedSignal.trim()) return false;
+  const haystackTokens = new Set(signalTokens(haystack));
+  return containsSignal(haystack, normalizedSignal) || signalTokens(normalizedSignal).some((token) => haystackTokens.has(token));
+};
 
 const matches = (candidate: string, expected?: string | null) => {
   const expectedValues = splitList(expected).length > 0 ? splitList(expected) : [text(expected)];
@@ -43,10 +56,20 @@ const matches = (candidate: string, expected?: string | null) => {
   );
 };
 
+const isSkillEvidenceLookup = (query: string | undefined, skills: string[]) => {
+  if (!skills.length) return false;
+  const normalized = text(query).toLowerCase();
+  if (!/\b(list|show|give|find|who|which|people|persons|employees?|resources?)\b/.test(normalized)) return false;
+  if (!/\b(skill|skills|skilled|knows?|experience|experienced|with)\b/.test(normalized)) return false;
+  return !/\b(available|availability|bench|capacity|fte|staff|staffing|assign|team|opportunity|role|roles|within|next\s+\d{1,3}\s+days?)\b/.test(
+    normalized,
+  );
+};
+
 const extractQuerySignals = (db: DatabaseSync, query?: string) => {
   const normalizedQuery = ` ${text(query).toLowerCase()} `;
   const skillRows = all(db, "SELECT name FROM SkillCatalog ORDER BY length(name) DESC").filter((row) =>
-    containsSignal(normalizedQuery, text(row.name)),
+    containsSignalOrToken(normalizedQuery, text(row.name)),
   );
   const locationRows = all(
     db,
@@ -277,7 +300,12 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
     const availabilityWindowDays = input.availabilityWindowDays ?? querySignals.availabilityWindowDays ?? 30;
     const targetDate = addUtcDays(asUtcDate(todayIso), availabilityWindowDays).toISOString().slice(0, 10);
     const contextMinFte = context?.minFte ?? 0.1;
-    const minFte = input.minFte == null ? contextMinFte : Math.max(input.minFte, contextMinFte);
+    const skillEvidenceLookup = isSkillEvidenceLookup(input.query, skills);
+    const minFte = input.minFte == null
+      ? (skillEvidenceLookup ? 0 : contextMinFte)
+      : skillEvidenceLookup
+        ? input.minFte
+        : Math.max(input.minFte, contextMinFte);
     const limit = input.limit ?? 20;
     const weeklyFte = weeklyAvailabilityByPerson(db, targetDate);
     const personSkills = skillsByPerson(db);

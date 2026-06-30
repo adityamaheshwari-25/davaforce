@@ -1,7 +1,6 @@
 flowchart TD
     caller["Router / API / Planner<br/>query, opportunityId,<br/>datasetId or dbPath"]
-    agent["Opportunity Assessment Agent<br/>Mastra Agent<br/>opportunityAssessmentAgent"]
-    tool["opportunityAssessmentTool<br/>assessOpportunity()"]
+    tool["Opportunity Assessment Tool<br/>Mastra Tool<br/>opportunityAssessmentTool<br/>assessOpportunity()"]
 
     subgraph access["Data Access"]
         direction LR
@@ -23,7 +22,7 @@ flowchart TD
     outputJson["OpportunityAssessmentOutput JSON<br/>selectionDiagnostics, opportunity,<br/>roles, normalizedRequirements,<br/>rolePrioritization, evidence"]
     downstream["Downstream Consumers<br/>Router, Team Builder,<br/>Resource Supply by role,<br/>Risk and Approval packages"]
 
-    caller --> agent --> tool --> resolver --> sqlite --> tables
+    caller --> tool --> resolver --> sqlite --> tables
     tool --> select --> roles --> normalize --> prioritize --> missing --> outputJson
     sqlite --> select
     sqlite --> roles
@@ -32,14 +31,12 @@ flowchart TD
     outputJson --> downstream
 
     classDef actor fill:#fff7e6,stroke:#c57a00,color:#2b1d00,stroke-width:1px;
-    classDef agentNode fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
     classDef toolNode fill:#fff4e8,stroke:#c96b20,color:#402100,stroke-width:1px;
     classDef control fill:#f4f0ff,stroke:#7b61c9,color:#22173a,stroke-width:1px;
     classDef data fill:#f2f4f7,stroke:#667085,color:#1d2939,stroke-width:1px;
     classDef outputNode fill:#eef5ff,stroke:#356ae6,color:#10213a,stroke-width:1px;
 
     class caller actor;
-    class agent agentNode;
     class tool toolNode;
     class resolver,select,roles,signals,normalize,prioritize,missing control;
     class sqlite,tables data;

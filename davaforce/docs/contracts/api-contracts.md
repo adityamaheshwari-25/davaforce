@@ -1222,7 +1222,7 @@ Unsupported section path:
 
 Answer one workspace chat question using workforce-planning evidence.
 
-The current workspace chat handler calls tool functions directly from `backend/src/mastra/tools`. Matching Mastra `Agent` wrappers exist in `backend/src/mastra/agents`, but this endpoint does not invoke those wrappers today. The `agentsUsed` response field names the logical specialists represented by the evidence, not necessarily executed `Agent` instances. The endpoint returns chat-visible text plus per-message detail JSON for the workspace right panel.
+The current workspace chat handler calls tool functions directly from `backend/src/mastra/tools`. The only registered Mastra agent is the Workforce Router Agent. The legacy `agentsUsed` response field names the Workforce Router Agent plus logical tools represented by the evidence, not multiple executed `Agent` instances. The endpoint returns chat-visible text plus per-message detail JSON for the workspace right panel.
 
 Current runtime path used by this endpoint:
 
@@ -1231,11 +1231,11 @@ Current runtime path used by this endpoint:
 - `buildTeamOptions()`
 - `buildWorkforceDashboardSkillGaps()`
 
-Implemented specialist paths not currently wired into this endpoint:
+Implemented router and specialist tool paths:
 
 - `workforceRouterAgent` / `workforceRouterTool` / `routeWorkforceQuestion()`
-- `riskInsightsAgent` / `riskInsightsTool` / `buildRiskInsights()`
-- `approvalDecisionAgent` / `approvalDecisionTool` / `buildApprovalDecision()`
+- `riskInsightsTool` / `buildRiskInsights()`
+- `approvalDecisionTool` / `buildApprovalDecision()`
 
 The backend first builds deterministic JSON evidence from the dataset. If `OPENAI_API_KEY` is configured, OpenAI writes the concise chat-facing `message` from that evidence. If no key is configured, the endpoint returns a deterministic fallback message.
 
@@ -1260,7 +1260,7 @@ Content-Type: application/json
 {
   "status": "success",
   "conversationId": "chat_00000000-0000-0000-0000-000000000000",
-  "message": "Chat-visible answer generated from agent evidence.",
+  "message": "Chat-visible answer generated from tool evidence.",
   "detailView": "staffing-fit",
   "details": {
     "view": "staffing-fit",
@@ -1277,9 +1277,10 @@ Content-Type: application/json
     }
   },
   "agentsUsed": [
-    "opportunity-assessment-agent",
-    "resource-supply-agent",
-    "team-builder-agent"
+    "workforce-router-agent",
+    "opportunity-assessment-tool",
+    "resource-supply-tool",
+    "team-builder-tool"
   ]
 }
 ```
@@ -1290,9 +1291,10 @@ Frontend rule:
 - Attach `details` to the same assistant message.
 - Show `View details` when `detailView` and `details` are present.
 - Render the right-side workspace panel from `details.cards`, `details.charts`, and `details.tables`.
-- Supported current `detailView` values are `overview`, `staffing-fit`, `supply-risk`, `skill-gaps`, and `demand`.
+- Supported current `detailView` values are `overview`, `staffing-fit`, `supply-risk`, `skill-gaps`, `demand`, and `table-query`.
+- Generic DB query responses return `detailView: "table-query"` and include `details.json.genericDatasetQuery`, `details.tables[0]`, query metadata cards, and raw JSON for the right-side evidence container.
 - If the route cannot safely infer the target opportunity, return a clarification `message`, `needsClarification: true`, and no detail panel.
-- EWA, approval, blocker, risk-insight, and final recommendation questions require wiring `workforceRouterTool`, `riskInsightsTool`, and `approvalDecisionTool` into this endpoint before the frontend should show those as supported chat paths.
+- EWA, approval, blocker, risk-insight, and final recommendation questions require `workforceRouterTool`, `riskInsightsTool`, and `approvalDecisionTool` before the frontend should show those as supported chat paths.
 
 ### Failure Responses
 
@@ -1350,7 +1352,7 @@ Primary route handlers:
 - `src/next/workforce-dashboard-route.ts`
 - `src/next/workforce-chat-route.ts`
 
-Primary workforce agent tools:
+Primary workforce tools:
 
 - `src/mastra/tools/workforce-router-tool.ts`
 - `src/mastra/tools/opportunity-assessment-tool.ts`

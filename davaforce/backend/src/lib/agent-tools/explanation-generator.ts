@@ -113,8 +113,8 @@ export function explanationGenerator(input: ExplanationGeneratorInput): Explanat
   const summary =
     highlights[0] ??
     (input.intent === "risk-review"
-      ? "Risk review completed from agent-tool evidence."
-      : "Explanation generated from agent-tool outputs.");
+      ? "Risk review completed from tool evidence."
+      : "Explanation generated from tool outputs.");
   const markdownSections = [
     `# ${title}`,
     "",

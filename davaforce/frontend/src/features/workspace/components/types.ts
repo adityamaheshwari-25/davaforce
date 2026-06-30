@@ -1,4 +1,4 @@
-export type DashboardView = "overview" | "staffing-fit" | "supply-risk" | "skill-gaps" | "demand";
+export type DashboardView = "overview" | "staffing-fit" | "supply-risk" | "skill-gaps" | "demand" | "table-query";
 
 export type WorkspaceDetailCard = {
   label: string;

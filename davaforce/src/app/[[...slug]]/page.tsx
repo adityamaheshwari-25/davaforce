@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import HomePage from "../../../frontend/src/app/page";
 import AskPage from "../../../frontend/src/app/ask/page";
+import ValidatePage from "../../../frontend/src/app/validate/page";
 import WorkspacePage from "../../../frontend/src/app/workspace/page";
 import Dashboard from "../../../frontend/src/app/dashboard/page";
 import { DashboardShell } from "../../../frontend/src/components/dashboard-shell";
@@ -21,6 +22,10 @@ export default async function RouteBridge({ params }: PageProps) {
 
   if (routeKey === "ask") {
     return <AskPage />;
+  }
+
+  if (routeKey === "validate") {
+    return <ValidatePage />;
   }
 
   if (routeKey === "workspace") {

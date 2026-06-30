@@ -6,6 +6,8 @@ import {
   BriefcaseBusiness,
   CalendarClock,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   CircleAlert,
   ClipboardCheck,
@@ -25,8 +27,9 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { WorkspaceAgentDetails } from "./types";
+import type { WorkspaceAgentDetails, WorkspaceDetailTable } from "./types";
 import {
   COLORS,
   bool,
@@ -62,7 +65,7 @@ export function WorkspaceDetailPanel({ sourceName, details }: WorkspaceDetailPan
             {details ? `Source: ${sourceName}` : "Open details from an assistant response when you need the evidence view."}
           </p>
         </div>
-        {details?.json ? <AgentBadge json={details.json} /> : null}
+        {details ? <AgentBadge details={details} /> : null}
       </div>
 
       <div className="mt-5">
@@ -84,6 +87,7 @@ function AgentDetailDashboard({ details }: { details: WorkspaceAgentDetails }) {
   const teamBuilder = record(json.teamBuilder);
   const riskInsights = record(json.riskInsights);
   const approvalDecision = record(json.approvalDecision);
+  const genericDatasetQuery = genericDatasetQueryContract(details);
 
   return (
     <div className="space-y-5">
@@ -100,6 +104,8 @@ function AgentDetailDashboard({ details }: { details: WorkspaceAgentDetails }) {
         <ResourceSupplyDashboard data={resourceSupply} />
       ) : opportunityAssessment ? (
         <OpportunityAssessmentDashboard data={opportunityAssessment} />
+      ) : genericDatasetQuery ? (
+        <GenericDatasetQueryDashboard data={genericDatasetQuery} tables={details.tables} />
       ) : (
         <UnsupportedContractDashboard />
       )}
@@ -131,7 +137,7 @@ function UnsupportedContractDashboard() {
       </div>
       <h3 className="mt-4 font-display text-lg font-semibold">Unsupported contract shape</h3>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--home-muted)]">
-        This response did not include one of the configured agent contract keys.
+        This response did not include one of the configured tool contract keys.
       </p>
     </div>
   );
@@ -144,7 +150,7 @@ function AgentHero({ details }: { details: WorkspaceAgentDetails }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-brand">
             <Sparkles className="h-3.5 w-3.5" />
-            Agent contract response
+            Tool contract response
           </div>
           <p className="mt-3 max-w-4xl text-sm leading-6 text-[var(--home-text)]">{details.summary}</p>
         </div>
@@ -192,7 +198,7 @@ function RouterPath({ router }: { router: AnyRecord }) {
                 <span className="text-[11px] font-semibold uppercase text-brand">Step {number(step.order, index + 1)}</span>
                 <span className="text-[10px] text-[var(--home-muted)]">{strings(step.dependsOn).length ? "has dependency" : "start"}</span>
               </div>
-              <div className="mt-1 font-display text-sm font-semibold">{text(step.agent, "Agent")}</div>
+              <div className="mt-1 font-display text-sm font-semibold">{text(step.agent, "Tool")}</div>
               <div className="mt-1 line-clamp-2 text-xs text-[var(--home-muted)]">{text(step.purpose, "No purpose supplied.")}</div>
             </div>
           ))}
@@ -535,7 +541,8 @@ function ApprovalDashboard({ data }: { data: AnyRecord }) {
   );
 }
 
-function AgentBadge({ json }: { json: AnyRecord }) {
+function AgentBadge({ details }: { details: WorkspaceAgentDetails }) {
+  const json = details.json;
   const label = json.approvalDecision
     ? "Approval"
     : json.riskInsights
@@ -546,12 +553,109 @@ function AgentBadge({ json }: { json: AnyRecord }) {
           ? "Supply"
           : json.opportunityAssessment
             ? "Demand"
-            : "Agent";
+            : genericDatasetQueryContract(details)
+              ? "Query"
+              : "Tool";
 
   return (
     <span className="rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
       {label} JSON
     </span>
+  );
+}
+
+function genericDatasetQueryContract(details: WorkspaceAgentDetails) {
+  const json = details.json;
+  const explicit = record(json.genericDatasetQuery);
+  if (explicit) return explicit;
+
+  if (text(json.queryType) && text(json.tableName)) {
+    return json;
+  }
+
+  if (details.view !== "table-query") return null;
+
+  const firstTable = details.tables[0];
+  const tableCard = details.cards.find((card) => /^(table|sheet)$/i.test(card.label));
+  const rowsCard = details.cards.find((card) => /^rows$/i.test(card.label));
+  const queryTypeCard = details.cards.find((card) => /^query type$/i.test(card.label));
+  const filterCard = details.cards.find((card) => /^filters$/i.test(card.label));
+
+  return {
+    query: details.summary,
+    queryType: queryTypeCard?.value || "list",
+    tableName: tableCard?.detail || tableCard?.value || "Dataset",
+    tableDisplayName: tableCard?.value || tableCard?.detail || "Dataset",
+    confidence: queryTypeCard?.detail || "n/a",
+    filters: filterCard?.detail && filterCard.detail !== "No filters" ? [filterCard.detail] : [],
+    totalMatchingRows: number(rowsCard?.value, firstTable?.rows.length ?? 0),
+    returnedRows: firstTable?.rows.length ?? 0,
+    headers: firstTable?.headers ?? [],
+    rows: firstTable?.rows ?? [],
+  };
+}
+
+function GenericDatasetQueryDashboard({ data, tables }: { data: AnyRecord; tables: WorkspaceDetailTable[] }) {
+  const filterRecords = records(data.filters);
+  const filterTerms = filterRecords.length
+    ? filterRecords.map((filter) => text(filter.term)).filter(Boolean)
+    : strings(data.filters);
+  const groupBy = record(data.groupBy);
+  const queryType = text(data.queryType, "list").replace("_", " ");
+  const resultTables = tables.length
+    ? tables
+    : [
+        {
+          title: "Query Results",
+          headers: strings(data.headers),
+          rows: Array.isArray(data.rows) ? (data.rows as string[][]) : [],
+        },
+      ];
+
+  return (
+    <div className="space-y-5">
+      <MetricGrid
+        items={[
+          {
+            icon: TableProperties,
+            label: "Table",
+            value: text(data.tableDisplayName, text(data.tableName, "Dataset")),
+            detail: text(data.tableName),
+          },
+          {
+            icon: SearchCheck,
+            label: "Rows",
+            value: formatNumber(number(data.totalMatchingRows)),
+            detail: `${formatNumber(number(data.returnedRows))} returned`,
+          },
+          {
+            icon: FileJson2,
+            label: "Query Type",
+            value: queryType,
+            detail: text(data.confidence, "n/a"),
+          },
+          {
+            icon: ListChecks,
+            label: "Filters",
+            value: filterTerms.length ? String(filterTerms.length) : "0",
+            detail: filterTerms.join(", ") || "No filters",
+          },
+        ]}
+      />
+      <InfoPanel
+        icon={ClipboardCheck}
+        title="Query Plan"
+        rows={[
+          ["Question", text(data.query, "n/a")],
+          ["Read Mode", "SELECT only"],
+          ["Group By", groupBy ? text(groupBy.displayName, text(groupBy.columnName)) : text(data.groupBy, "None")],
+          ["Filters", filterTerms.join(", ") || "None"],
+        ]}
+      />
+      {resultTables.map((table) => (
+        <DataTable key={table.title} title={table.title} headers={table.headers} rows={table.rows} />
+      ))}
+    </div>
   );
 }
 
@@ -715,7 +819,7 @@ function RoleCandidateGrid({ roles }: { roles: AnyRecord[] }) {
 function RiskCards({ title, items }: { title: string; items: AnyRecord[] }) {
   return (
     <section className="space-y-3">
-      <SectionTitle icon={AlertTriangle} title={title} subtitle="Evidence-backed risk items returned by the agent" />
+      <SectionTitle icon={AlertTriangle} title={title} subtitle="Evidence-backed risk items returned by the tool" />
       {items.length ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {items.slice(0, 8).map((item, index) => (
@@ -758,7 +862,7 @@ function ImpactPanel({ title, items }: { title: string; items: AnyRecord[] }) {
 function ActionPanel({ title, items, icon: Icon }: { title: string; items: string[]; icon: LucideIcon }) {
   return (
     <div className="rounded-xl border border-[var(--home-border)] bg-[var(--home-soft)] p-4">
-      <SectionTitle icon={Icon} title={title} subtitle="Next human actions from the agent output" />
+      <SectionTitle icon={Icon} title={title} subtitle="Next human actions from the tool output" />
       <div className="mt-4 space-y-2">
         {items.length ? items.map((item, index) => (
           <div key={`${item}-${index}`} className="flex gap-2 rounded-lg border border-[var(--home-border)] bg-[var(--home-panel)] p-3 text-sm">
@@ -774,7 +878,7 @@ function ActionPanel({ title, items, icon: Icon }: { title: string; items: strin
 function InfoPanel({ icon: Icon, title, rows }: { icon: LucideIcon; title: string; rows: string[][] }) {
   return (
     <div className="rounded-xl border border-[var(--home-border)] bg-[var(--home-soft)] p-4">
-      <SectionTitle icon={Icon} title={title} subtitle="Structured fields from the agent contract" />
+      <SectionTitle icon={Icon} title={title} subtitle="Structured fields from the tool contract" />
       <div className="mt-4 divide-y divide-[var(--home-border)] rounded-lg border border-[var(--home-border)] bg-[var(--home-panel)]">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 px-3 py-2 text-xs">
@@ -851,39 +955,89 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: LucideIcon; title
   );
 }
 
+const DETAIL_TABLE_PAGE_SIZE = 10;
+
 function DataTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(rows.length / DETAIL_TABLE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const startIndex = currentPage * DETAIL_TABLE_PAGE_SIZE;
+  const pageRows = rows.slice(startIndex, startIndex + DETAIL_TABLE_PAGE_SIZE);
+  const endIndex = rows.length ? startIndex + pageRows.length : 0;
+  const columnCount = rows.reduce((count, row) => Math.max(count, row.length), Math.max(headers.length, 1));
+  const tableMinWidth = columnCount > 4 ? `${Math.max(52, columnCount * 11)}rem` : "100%";
+  const showPagination = rows.length > DETAIL_TABLE_PAGE_SIZE;
+  const columns = Array.from({ length: columnCount }, (_, index) => headers[index] || `Column ${index + 1}`);
+
   return (
     <div className="space-y-3">
-      <SectionTitle icon={TableProperties} title={title} subtitle={`${rows.length} row(s) returned with this response`} />
-      <div className="rounded-xl border border-[var(--home-border)]">
-        <table className="w-full table-fixed text-left text-sm">
-          <thead className="bg-[var(--home-soft)] text-xs text-[var(--home-muted)]">
-            <tr>
-              {headers.map((header) => (
-                <th key={header} className="px-4 py-3 font-medium">
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? rows.map((row, rowIndex) => (
-              <tr key={`${title}-${rowIndex}`} className="border-t border-[var(--home-border)]">
-                {row.map((cell, index) => (
-                  <td key={`${title}-${rowIndex}-${index}`} className="px-4 py-3 align-top text-[var(--home-text)]">
-                    <span className="line-clamp-3 break-words">{cell}</span>
-                  </td>
+      <SectionTitle
+        icon={TableProperties}
+        title={title}
+        subtitle={
+          rows.length
+            ? `${startIndex + 1}-${endIndex} of ${rows.length} row(s)`
+            : "0 row(s) returned with this response"
+        }
+      />
+      <div className="max-w-full overflow-hidden rounded-xl border border-[var(--home-border)]">
+        <div className="smooth-chat-scroll max-w-full overflow-x-auto">
+          <table className="min-w-full border-collapse text-left text-sm" style={{ minWidth: tableMinWidth }}>
+            <thead className="bg-[var(--home-soft)] text-xs text-[var(--home-muted)]">
+              <tr>
+                {columns.map((header, index) => (
+                  <th key={`${title}-header-${index}`} className="min-w-40 px-4 py-3 font-medium">
+                    <span className="block max-w-64 truncate">{header}</span>
+                  </th>
                 ))}
               </tr>
-            )) : (
-              <tr className="border-t border-[var(--home-border)]">
-                <td className="px-4 py-6 text-center text-sm text-[var(--home-muted)]" colSpan={headers.length}>
-                  No rows returned.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length ? pageRows.map((row, rowIndex) => (
+                <tr key={`${title}-${startIndex + rowIndex}`} className="border-t border-[var(--home-border)]">
+                  {columns.map((_, index) => (
+                    <td key={`${title}-${startIndex + rowIndex}-${index}`} className="min-w-40 px-4 py-3 align-top text-[var(--home-text)]">
+                      <span className="line-clamp-3 max-w-64 break-words">{row[index] ?? ""}</span>
+                    </td>
+                  ))}
+                </tr>
+              )) : (
+                <tr className="border-t border-[var(--home-border)]">
+                  <td className="px-4 py-6 text-center text-sm text-[var(--home-muted)]" colSpan={columnCount}>
+                    No rows returned.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {showPagination ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--home-border)] bg-[var(--home-panel)] px-3 py-2 text-xs text-[var(--home-muted)]">
+            <span>
+              Page {currentPage + 1} of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--home-border)] bg-[var(--home-panel-strong)] text-[var(--home-text)] disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => setPage((value) => Math.max(0, value - 1))}
+                disabled={currentPage === 0}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--home-border)] bg-[var(--home-panel-strong)] text-[var(--home-text)] disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => setPage((value) => Math.min(totalPages - 1, value + 1))}
+                disabled={currentPage >= totalPages - 1}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

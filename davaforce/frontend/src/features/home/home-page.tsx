@@ -180,8 +180,8 @@ const uploadAssurances: LandingCard[] = [
     icon: FileSpreadsheet,
   },
   {
-    title: "Ready for questions",
-    copy: "The next screen opens directly into the workforce planning assistant.",
+    title: "Ready to validate",
+    copy: "Validate the generated table headers before opening the workforce planning assistant.",
     icon: Sparkles,
   },
 ];
@@ -687,7 +687,7 @@ export default function HomePage() {
   useEffect(() => {
     if (phase !== "success") return;
 
-    const timer = window.setTimeout(() => router.push("/ask"), 1900);
+    const timer = window.setTimeout(() => router.push("/validate"), 1900);
     return () => window.clearTimeout(timer);
   }, [phase, router]);
 
@@ -882,6 +882,7 @@ export default function HomePage() {
       progressWatcher.close();
       window.localStorage.setItem("workforceDatasetId", createdDataset.datasetId);
       window.localStorage.setItem("workforceDatasetName", createdDataset.originalFileName || file.name);
+      window.localStorage.removeItem("workforceDatasetSchemaValidated");
       setDataset(createdDataset);
       setPhase("success");
     } catch (uploadError) {
@@ -909,6 +910,7 @@ export default function HomePage() {
     window.localStorage.removeItem("workforceUser");
     window.localStorage.removeItem("workforceDatasetId");
     window.localStorage.removeItem("workforceDatasetName");
+    window.localStorage.removeItem("workforceDatasetSchemaValidated");
     window.localStorage.removeItem("workforcePrompt");
     setUser(null);
     resetUpload();

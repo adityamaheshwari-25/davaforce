@@ -7,7 +7,7 @@ DavaForce runs as one Next.js server, but the code is organized so frontend, bac
 ```text
 davaforce/
   frontend/   Frontend-owned UI, feature modules, shell components, hooks, and assets
-  backend/    Backend routes, data import, agents, tools, workflows, and scripts
+  backend/    Backend routes, data import, router agent, tools, workflows, and scripts
   src/app/    Thin Next.js bridge for app and API routes
   public/     Runtime-ready static assets served by Next.js
   docs/       Requirements, architecture, contracts, and team guidance
@@ -51,7 +51,7 @@ export default DashboardPage;
 
 ## Backend Ownership
 
-Backend, data, and agent work belongs in:
+Backend, data, router-agent, and tool work belongs in:
 
 ```text
 backend/
@@ -63,7 +63,7 @@ Backend-owned areas include:
 - Excel import and validation
 - dataset storage and normalization
 - dashboard/chat data services
-- Mastra agents, tools, schemas, and workflows
+- Workforce Router Agent, Mastra tools, schemas, and workflows
 - backend scripts
 
 Typical backend paths:
@@ -148,6 +148,6 @@ npm run build
 
 If you are building UI, work in `frontend/src/features` or shared frontend components.
 
-If you are building API, data import, Excel traversal, agents, tools, or workflows, work in `backend/`.
+If you are building API, data import, Excel traversal, router-agent logic, tools, or workflows, work in `backend/`.
 
 If you are only exposing a page or API route to Next.js, update the small bridge in root `src/app/`.

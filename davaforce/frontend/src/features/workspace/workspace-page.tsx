@@ -9,6 +9,7 @@ import { WorkspaceTopNav } from "@/components/shell/workspace-top-nav";
 import { WorkspaceChatPanel } from "@/features/workspace/components/workspace-chat-panel";
 import { WorkspaceDetailPanel } from "@/features/workspace/components/workspace-detail-panel";
 import type { ChatConversationSummary, ChatMessage, DashboardView, WorkspaceAgentDetails } from "@/features/workspace/components/types";
+import { isDatasetSchemaValidated } from "@/lib/workforce-schema-validation";
 
 type WorkspaceChatPayload = {
   status: "success" | "failure";
@@ -208,6 +209,14 @@ export default function WorkspacePage() {
     const storedPrompt = window.localStorage.getItem(legacyWorkspacePromptKey) ?? "";
     const storedPromptId = window.localStorage.getItem(legacyWorkspacePromptIdKey) ?? "";
     const storedDatasetId = window.localStorage.getItem("workforceDatasetId") ?? "";
+    let storedUserRecord: StoredWorkforceUser | null = null;
+    try {
+      storedUserRecord = JSON.parse(storedUser) as StoredWorkforceUser | null;
+    } catch {
+      window.localStorage.removeItem("workforceUser");
+      router.replace("/");
+      return;
+    }
     const storedHandledPrompt = window.localStorage.getItem(`${legacyWorkspacePromptKey}:handled`) ?? "";
     const storedHandledPromptId = window.localStorage.getItem(legacyWorkspacePromptHandledIdKey) ?? "";
     const promptMarker = storedPromptId || storedPrompt;
@@ -218,13 +227,26 @@ export default function WorkspacePage() {
     setDatasetId(storedDatasetId);
     setSourceName(window.localStorage.getItem("workforceDatasetName") ?? "normalized dataset");
     setHandledPrompt(storedHandledPrompt);
-    setIsCheckingAccess(false);
 
     let cancelled = false;
     let pressTimer: number | null = null;
     let sendTimer: number | null = null;
 
     const hydrate = async () => {
+      if (storedDatasetId) {
+        try {
+          if (!storedUserRecord?.userId || !(await isDatasetSchemaValidated(storedUserRecord.userId, storedDatasetId))) {
+            router.replace("/validate");
+            return;
+          }
+        } catch {
+          router.replace("/validate");
+          return;
+        }
+      }
+
+      if (cancelled) return;
+      setIsCheckingAccess(false);
       setIsLoadingConversations(true);
       try {
         const nextConversations = await fetchConversations();
@@ -347,7 +369,7 @@ export default function WorkspacePage() {
         {
           id: `${idPrefix}-ai-${Date.now()}`,
           role: "ai",
-          text: payload.message ?? "I prepared a workforce answer from the agent evidence.",
+          text: payload.message ?? "I prepared a workforce answer from the tool evidence.",
           detailView: payload.detailView ?? payload.details?.view ?? null,
           details: payload.details ?? null,
         },
@@ -416,6 +438,7 @@ export default function WorkspacePage() {
         setSourceName("normalized dataset");
         window.localStorage.removeItem("workforceDatasetId");
         window.localStorage.removeItem("workforceDatasetName");
+        window.localStorage.removeItem("workforceDatasetSchemaValidated");
         window.localStorage.removeItem(legacyWorkspacePromptKey);
         window.localStorage.removeItem(legacyWorkspacePromptIdKey);
         window.localStorage.removeItem(`${legacyWorkspacePromptKey}:handled`);

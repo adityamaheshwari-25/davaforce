@@ -7,6 +7,17 @@ import {
 } from "../lib/workbook-xlsx-buffer";
 import type { WorkforceUploadProgressUpdate } from "../lib/workforce-upload-progress";
 import { WORKFORCE_UPLOAD_STEP_LABELS } from "../lib/workforce-upload-progress";
+import {
+  WORKFORCE_SCHEMA_VALIDATION_VERSION,
+  SchemaValidationAlreadyCompletedError,
+  normalizeSchemaValidationState,
+  pendingSchemaValidationState,
+  sanitizeSchemaDisplayName,
+  schemaValidationSummary,
+  type WorkforceSchemaValidationState,
+  type WorkforceSchemaValidationSummary,
+  type WorkforceSchemaValidationTableAlias,
+} from "../lib/workforce-schema-validation-types";
 
 const DUMMY_USER_ROLES = [
   "Workforce Planner",
@@ -38,6 +49,7 @@ export type CloudDatasetRecord = {
   sourceSha256: string;
   excelObjectKey: string;
   staticDashboard: WorkforceStaticDashboardSnapshot | null;
+  schemaValidation: WorkforceSchemaValidationState | null;
 };
 
 export type CloudDatasetClientRecord = {
@@ -50,6 +62,7 @@ export type CloudDatasetClientRecord = {
   createdAt: string;
   importCounts: Record<string, number>;
   conversationId: string | null;
+  schemaValidation: WorkforceSchemaValidationSummary;
 };
 
 export type WorkforceDashboardSection = "summary" | "supply" | "demand" | "staffingFit" | "skills" | "ewa";
@@ -179,7 +192,8 @@ const schemaStatements = [
     "conversationId" TEXT,
     "sourceSha256" TEXT NOT NULL,
     "excelObjectKey" TEXT NOT NULL,
-    "staticDashboardJson" TEXT
+    "staticDashboardJson" TEXT,
+    "schemaValidationJson" TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS "WorkforceDataset_owner_created_idx"
     ON "WorkforceDataset"("ownerUserId", "createdAt" DESC)`,
@@ -219,6 +233,10 @@ const schemaStatements = [
     ON conversations(user_id, dataset_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS conversation_messages_conversation_idx
     ON conversation_messages(conversation_id, created_at ASC)`,
+];
+
+const schemaMigrationStatements = [
+  `ALTER TABLE "WorkforceDataset" ADD COLUMN "schemaValidationJson" TEXT`,
 ];
 
 let schemaReady = false;
@@ -338,6 +356,16 @@ export const ensureCloudSchema = async (db: D1DatabaseLike) => {
   for (const statement of schemaStatements) {
     await d1Run(db, statement);
   }
+  for (const statement of schemaMigrationStatements) {
+    try {
+      await d1Run(db, statement);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate column|already exists/i.test(message)) {
+        throw error;
+      }
+    }
+  }
   for (const user of SEEDED_USERS) {
     await d1Run(
       db,
@@ -424,6 +452,9 @@ const toDatasetRecord = (row: Record<string, unknown>): CloudDatasetRecord => ({
   sourceSha256: text(row.sourceSha256),
   excelObjectKey: text(row.excelObjectKey),
   staticDashboard: safeJsonParse<WorkforceStaticDashboardSnapshot | null>(row.staticDashboardJson, null),
+  schemaValidation: normalizeSchemaValidationState(
+    safeJsonParse<unknown>(row.schemaValidationJson, null),
+  ),
 });
 
 export const toClientDatasetRecord = (record: CloudDatasetRecord): CloudDatasetClientRecord => ({
@@ -436,6 +467,7 @@ export const toClientDatasetRecord = (record: CloudDatasetRecord): CloudDatasetC
   createdAt: record.createdAt,
   importCounts: record.importCounts,
   conversationId: record.conversationId,
+  schemaValidation: schemaValidationSummary(record.schemaValidation),
 });
 
 const slugify = (value: string) =>
@@ -1016,6 +1048,7 @@ export const createCloudDatasetFromUpload = async (
     conversationId: text(options.conversationId) || createConversationId(),
     sourceSha256,
     excelObjectKey,
+    schemaValidation: null,
   };
 
   await options.onProgress?.({
@@ -1062,9 +1095,10 @@ export const createCloudDatasetFromUpload = async (
       INSERT INTO "WorkforceDataset" (
         "datasetId", "ownerUserId", "label", "dbFileName", "excelFileName",
         "originalFileName", "workbookVersion", "createdAt", "importCountsJson",
-        "conversationId", "sourceSha256", "excelObjectKey", "staticDashboardJson"
+        "conversationId", "sourceSha256", "excelObjectKey", "staticDashboardJson",
+        "schemaValidationJson"
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         baseRecord.datasetId,
@@ -1080,6 +1114,7 @@ export const createCloudDatasetFromUpload = async (
         baseRecord.sourceSha256,
         baseRecord.excelObjectKey,
         JSON.stringify(staticDashboard),
+        null,
       ],
     );
 
@@ -1213,6 +1248,214 @@ export const readCloudRawWorkbookRows = async (
       naturalKey: text(row.naturalKey),
       payload: safeJsonParse<Record<string, unknown>>(row.payloadJson, {}),
     })),
+  };
+};
+
+export type CloudSchemaPreviewColumn = {
+  columnName: string;
+  displayName: string;
+  type: string;
+  nullable: boolean;
+  primaryKey: boolean;
+};
+
+export type CloudSchemaPreviewTable = {
+  tableName: string;
+  rowCount: number;
+  columns: CloudSchemaPreviewColumn[];
+  rows: Array<Record<string, string>>;
+};
+
+export type CloudSchemaValidationResult = {
+  dataset: CloudDatasetClientRecord;
+  validation: WorkforceSchemaValidationState;
+  tables: CloudSchemaPreviewTable[];
+};
+
+const rawSheetTableOrder = Object.keys(NATURAL_KEY_COLUMNS);
+
+const schemaValidationForCloudDataset = (dataset: CloudDatasetRecord) =>
+  normalizeSchemaValidationState(dataset.schemaValidation) ?? pendingSchemaValidationState();
+
+const cloudSchemaAliasMap = (dataset: CloudDatasetRecord) => {
+  const aliases = new Map<string, Map<string, string>>();
+  for (const table of schemaValidationForCloudDataset(dataset).tables) {
+    aliases.set(
+      table.tableName,
+      new Map(table.columns.map((column) => [column.columnName, column.displayName])),
+    );
+  }
+  return aliases;
+};
+
+const rawSheetOrder = (sheetName: string) => {
+  const index = rawSheetTableOrder.indexOf(sheetName);
+  return index === -1 ? rawSheetTableOrder.length + 1 : index;
+};
+
+const previewCellText = (value: unknown) => {
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+};
+
+const inferCloudColumnType = (values: unknown[]) => {
+  const populated = values.filter((value) => value != null && value !== "");
+  if (!populated.length) return "TEXT";
+  if (populated.every((value) => typeof value === "boolean")) return "BOOLEAN";
+  if (populated.every((value) => typeof value === "number")) return "REAL";
+  return "TEXT";
+};
+
+const submittedCloudAliasMap = (tables: WorkforceSchemaValidationTableAlias[]) => {
+  const aliases = new Map<string, Map<string, string>>();
+  for (const table of tables) {
+    const tableName = text(table.tableName);
+    if (!tableName) continue;
+    const columns = new Map<string, string>();
+    for (const column of table.columns ?? []) {
+      const columnName = text(column.columnName);
+      if (!columnName) continue;
+      columns.set(columnName, sanitizeSchemaDisplayName(column.displayName, columnName));
+    }
+    aliases.set(tableName, columns);
+  }
+  return aliases;
+};
+
+const readCloudSchemaPreviewTables = async (
+  db: D1DatabaseLike,
+  dataset: CloudDatasetRecord,
+  sampleLimit = 8,
+): Promise<CloudSchemaPreviewTable[]> => {
+  await ensureCloudSchema(db);
+  const sheets = (
+    await d1All<{ sheetName: string; rows: number }>(
+      db,
+      `
+      SELECT "sheetName", COUNT(*) AS rows
+      FROM "WorkforceRawSheetRow"
+      WHERE "datasetId" = ?
+      GROUP BY "sheetName"
+      `,
+      [dataset.datasetId],
+    )
+  )
+    .map((sheet) => ({ sheetName: text(sheet.sheetName), rows: asInt(sheet.rows) }))
+    .filter((sheet) => sheet.sheetName)
+    .sort((left, right) => rawSheetOrder(left.sheetName) - rawSheetOrder(right.sheetName) || left.sheetName.localeCompare(right.sheetName));
+  const aliases = cloudSchemaAliasMap(dataset);
+  const limit = Math.max(1, Math.min(Math.trunc(sampleLimit), 25));
+  const tables: CloudSchemaPreviewTable[] = [];
+
+  for (const sheet of sheets) {
+    const rawRows = await d1All<{ payloadJson: string }>(
+      db,
+      `
+      SELECT "payloadJson"
+      FROM "WorkforceRawSheetRow"
+      WHERE "datasetId" = ? AND "sheetName" = ?
+      ORDER BY "sourceRowNumber" ASC
+      LIMIT ?
+      `,
+      [dataset.datasetId, sheet.sheetName, limit],
+    );
+    const payloads = rawRows.map((row) => safeJsonParse<Record<string, unknown>>(row.payloadJson, {}));
+    const columnNames = [...new Set(payloads.flatMap((payload) => Object.keys(payload)))];
+    const tableAliases = aliases.get(sheet.sheetName) ?? new Map<string, string>();
+    const naturalKeyColumn = NATURAL_KEY_COLUMNS[sheet.sheetName];
+    const columns = columnNames.map((columnName) => {
+      const values = payloads.map((payload) => payload[columnName]);
+      return {
+        columnName,
+        displayName: tableAliases.get(columnName) ?? columnName,
+        type: inferCloudColumnType(values),
+        nullable: values.some((value) => value == null || value === ""),
+        primaryKey: naturalKeyColumn === columnName,
+      };
+    });
+
+    tables.push({
+      tableName: sheet.sheetName,
+      rowCount: sheet.rows,
+      columns,
+      rows: payloads.map((payload) =>
+        Object.fromEntries(columns.map((column) => [column.columnName, previewCellText(payload[column.columnName])])),
+      ),
+    });
+  }
+
+  return tables;
+};
+
+const buildCloudSchemaValidationTables = (
+  previewTables: CloudSchemaPreviewTable[],
+  inputTables: WorkforceSchemaValidationTableAlias[],
+): WorkforceSchemaValidationTableAlias[] => {
+  const submitted = submittedCloudAliasMap(inputTables);
+  return previewTables.map((table) => {
+    const submittedColumns = submitted.get(table.tableName) ?? new Map<string, string>();
+    return {
+      tableName: table.tableName,
+      columns: table.columns.map((column) => ({
+        columnName: column.columnName,
+        displayName: sanitizeSchemaDisplayName(
+          submittedColumns.get(column.columnName) ?? column.displayName,
+          column.columnName,
+        ),
+      })),
+    };
+  });
+};
+
+export const readCloudDatasetSchemaValidation = async (
+  db: D1DatabaseLike,
+  datasetId: string,
+  userId: string,
+): Promise<CloudSchemaValidationResult> => {
+  const dataset = await assertCloudDatasetOwnedByUser(db, datasetId, userId);
+  return {
+    dataset: toClientDatasetRecord(dataset),
+    validation: schemaValidationForCloudDataset(dataset),
+    tables: await readCloudSchemaPreviewTables(db, dataset),
+  };
+};
+
+export const validateCloudDatasetSchema = async (
+  db: D1DatabaseLike,
+  input: {
+    datasetId: string;
+    userId: string;
+    tables: WorkforceSchemaValidationTableAlias[];
+  },
+): Promise<CloudSchemaValidationResult> => {
+  const dataset = await assertCloudDatasetOwnedByUser(db, input.datasetId, input.userId);
+  const currentValidation = schemaValidationForCloudDataset(dataset);
+  if (currentValidation.status === "validated") {
+    throw new SchemaValidationAlreadyCompletedError();
+  }
+
+  const previewTables = await readCloudSchemaPreviewTables(db, dataset);
+  const tables = buildCloudSchemaValidationTables(previewTables, input.tables);
+  const validation: WorkforceSchemaValidationState = {
+    schemaVersion: WORKFORCE_SCHEMA_VALIDATION_VERSION,
+    status: "validated",
+    validatedAt: utcNowIsoWithOffset(),
+    validatedByUserId: text(input.userId),
+    tables,
+  };
+
+  await d1Run(
+    db,
+    `UPDATE "WorkforceDataset" SET "schemaValidationJson" = ? WHERE "datasetId" = ?`,
+    [JSON.stringify(validation), dataset.datasetId],
+  );
+
+  const nextDataset = { ...dataset, schemaValidation: validation };
+  return {
+    dataset: toClientDatasetRecord(nextDataset),
+    validation,
+    tables: await readCloudSchemaPreviewTables(db, nextDataset),
   };
 };
 

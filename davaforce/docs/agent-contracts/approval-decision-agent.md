@@ -1,4 +1,4 @@
-# Approval & Decision Agent Contract
+# Approval & Decision Tool Contract
 
 ## Purpose
 
@@ -6,7 +6,6 @@ Prepare the final human approval package using selected staffing option, risk in
 
 ## Tool Source
 
-- Agent: `approvalDecisionAgent`
 - Tool: `approvalDecisionTool`
 - Source schema: `approvalDecisionOutputSchema`
 
@@ -126,6 +125,6 @@ Prepare the final human approval package using selected staffing option, risk in
 
 ## Notes
 
-- This agent must never auto-approve staffing, booking, or EWA actions.
+- This tool must never auto-approve staffing, booking, or EWA actions.
 - `readyForApproval` means ready for human review, not approved.
 - EWA requests are treated as the booking-status source of truth.

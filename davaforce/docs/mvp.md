@@ -4,13 +4,14 @@
 
 An AI-powered workforce planning platform that transforms staffing demand into evidence-backed team recommendations while keeping human approval through EWA at the center of decision-making.
 
-The platform uses structured workforce data, deterministic filtering/scoring, Mastra agents, deterministic tools, and session memory to support multi-turn workforce planning conversations.
+The platform uses structured workforce data, deterministic filtering/scoring, one Workforce Router Agent, deterministic tools, and session memory to support multi-turn workforce planning conversations.
 
 Terminology used in this document:
 
-* **Agent** means a Mastra `Agent` wrapper in `backend/src/mastra/agents`. It defines the specialist role, instructions, model, and available tool.
-* **Tool** means the deterministic implementation in `backend/src/mastra/tools`. It performs the actual DB-backed planning calculation.
-* **Current workspace chat runtime** means `backend/src/next/workforce-chat-route.ts`. Today this route calls the deterministic router/tool layer directly and returns structured details for the frontend evidence panel. It does not invoke the Mastra agent wrappers as hosted agents yet.
+* **Agent** means the `Workforce Router Agent` Mastra wrapper. It owns question routing and delegates to deterministic tools.
+* **Tool** means the deterministic implementation in `backend/src/mastra/tools`. Tools perform the actual DB-backed planning calculations.
+* **Sub-tool** means a lower-level helper in `backend/src/lib/agent-tools` used by the main tools for availability, capacity, skills, scoring, team construction, risk, explanations, and EWA packaging.
+* **Current workspace chat runtime** means `backend/src/next/workforce-chat-route.ts`. Today this route calls the deterministic router/tool layer directly and returns structured details for the frontend evidence panel.
 
 ---
 
@@ -42,7 +43,7 @@ The current implementation already preserves every workbook row in `RawSheetRow`
 * `Scenario Targets`
 * `Starter Prompts`
 
-`Starter Prompts` can remain raw-only for import traceability and chat testing. They are not part of the static dashboard; they are optional ask/chat suggestions for quickly exercising the implemented agent paths.
+`Starter Prompts` can remain raw-only for import traceability and chat testing. They are not part of the static dashboard; they are optional ask/chat suggestions for quickly exercising the implemented tool paths.
 
 The static dashboard can inspect the preserved source workbook without changing planning calculations. `GET /api/workforce-datasets/raw` reads `RawSheetRow` for a sheet-level preview, while `GET /api/workforce-datasets/download` returns the original uploaded `.xlsx` file. Deterministic planning tools should continue to use the normalized canonical tables.
 
@@ -71,7 +72,7 @@ Prisma ORM
 DavaForce Engine
         |
         v
-Mastra AI Agents + Tools
+Mastra Workforce Router Agent + Tools
         |
         v
 Next.js API Routes / Server Actions
@@ -84,7 +85,7 @@ Next.js Frontend
 
 # System Architecture
 
-The codebase has real Mastra agents and deterministic Mastra tools. The active Next.js chat API currently calls the tools directly, while the Mastra agents define the specialist roles and hosted-agent interface.
+The codebase has one registered Mastra Workforce Router Agent and deterministic Mastra tools. The active Next.js chat API currently calls the tools directly, while the router agent defines the hosted-agent interface when Mastra execution is used.
 
 ```text
                     Excel Dataset
@@ -114,8 +115,8 @@ The codebase has real Mastra agents and deterministic Mastra tools. The active N
 --------------------------------------------------------------
                           |
                           v
-                 Mastra Agent Layer
-          (specialist wrappers and instructions)
+              Workforce Router Agent
+             (routing wrapper and instructions)
                           |
                           v
                 Deterministic Tool Layer
@@ -123,17 +124,17 @@ The codebase has real Mastra agents and deterministic Mastra tools. The active N
                           |
           +---------------+---------------+
           v                               v
- Opportunity Assessment Agent      Resource Supply Agent
+ Opportunity Assessment Tool       Resource Supply Tool
           |                               |
           +---------------+---------------+
                           v
-                  Team Builder Agent
+                  Team Builder Tool
                           |
                           v
-                 Risk & Insights Agent
+                 Risk & Insights Tool
                           |
                           v
-              Approval & Decision Agent
+              Approval & Decision Tool
                           |
                           v
         Next.js API Routes / Server Actions
@@ -147,9 +148,9 @@ The codebase has real Mastra agents and deterministic Mastra tools. The active N
 
 # Runtime Execution Model
 
-The implemented planning logic lives in Mastra tools, and each specialist has a Mastra agent wrapper in `backend/src/mastra/agents`. The active `/api/workforce-chat` route imports the deterministic router and tools from `backend/src/mastra/tools` directly.
+The implemented planning logic lives in Mastra tools. The active `/api/workforce-chat` route imports the deterministic router and tools from `backend/src/mastra/tools` directly.
 
-There is no current parallel hosted-agent execution in the workspace chat route. Tool functions run synchronously in the order required by the selected intent path.
+There is no current parallel hosted specialist execution in the workspace chat route. Tool functions run synchronously in the order required by the selected intent path.
 
 ```text
 User Request
@@ -185,12 +186,15 @@ Implemented runtime paths:
 | Path | What exists | What runs |
 | ---- | ----------- | --------- |
 | Current workspace chat | Direct router/tool imports plus optional OpenAI response composition in `workforce-chat-route.ts` | `routeWorkforceQuestion()` plus deterministic tool calls selected by intent; OpenAI rewrites the final chat-facing answer when configured |
-| Workforce Router | `workforceRouterAgent` and `workforceRouterTool` | `workforceRouterTool` is called by workspace chat; the wrapper agent is not hosted in the route |
-| Team Builder | `teamBuilderAgent` and `teamBuilderTool` | `buildTeamOptions()` is called by workspace chat |
-| Risk & Insights | `riskInsightsAgent` and `riskInsightsTool` | `buildRiskInsights()` is called by the router when risk intent is selected |
-| Approval & Decision | `approvalDecisionAgent` and `approvalDecisionTool` | `buildApprovalDecision()` is called by the router when approval or EWA intent is selected |
+| Workforce Router Agent | `workforceRouterAgent` and `workforceRouterTool` | `workforceRouterTool` is called by workspace chat; the router agent is the only registered Mastra agent |
+| Opportunity Assessment Tool | `opportunityAssessmentTool` | `assessOpportunity()` is called by the router when demand intent is selected |
+| Resource Supply Tool | `resourceSupplyTool` | `findResourceSupply()` is called by the router when supply intent is selected |
+| Team Builder Tool | `teamBuilderTool` | `buildTeamOptions()` is called by workspace chat or the router when team intent is selected |
+| Risk & Insights Tool | `riskInsightsTool` | `buildRiskInsights()` is called by the router when risk intent is selected |
+| Approval & Decision Tool | `approvalDecisionTool` | `buildApprovalDecision()` is called by the router when approval or EWA intent is selected |
+| Generic DB Query Tool | `genericDatasetQueryTool` | `queryGenericDataset()` answers generic read-only table questions and returns a `table-query` detail panel contract |
 
-The workspace chat API returns `detailView`, `details`, `agentsUsed`, and routing evidence so the frontend can render the right-side agent evidence panel without relying on generic fallbacks.
+The workspace chat API returns `detailView`, `details`, the legacy compatibility field `agentsUsed`, and routing evidence so the frontend can render the right-side tool evidence panel without relying on generic fallbacks. The `agentsUsed` field should contain `workforce-router-agent` plus selected tool IDs. Generic DB query answers use `detailView: "table-query"` and include `details.json.genericDatasetQuery`.
 
 Final response wording follows an OpenAI-first, deterministic-fallback approach:
 
@@ -219,7 +223,7 @@ Implemented frontend routes:
 | ---- | ------- |
 | `/` | DavaForce sign-in, upload, and workbook processing flow |
 | `/ask` | First-question entry screen for the active uploaded dataset |
-| `/workspace` | Resizable chat workspace with a JSON-backed agent evidence panel |
+| `/workspace` | Resizable chat workspace with a JSON-backed tool evidence panel |
 | `/dashboard` | Static dashboard for dataset-level supply, demand, staffing fit, skills, EWA views, raw Excel preview, and source workbook download |
 
 The root `src/app` folder remains a bridge that exposes these frontend pages and backend API routes through one Next.js server.
@@ -243,10 +247,10 @@ Produces:
 
 ## Specialist Areas
 
-Each specialist area has two code pieces:
+Each specialist area is implemented as a deterministic tool:
 
-* a Mastra agent wrapper in `backend/src/mastra/agents`
-* a deterministic tool in `backend/src/mastra/tools`
+* a routed tool in `backend/src/mastra/tools`
+* lower-level sub-tools in `backend/src/lib/agent-tools` where shared availability, skills, capacity, scoring, risk, or explanation logic is needed
 
 ### Opportunity Assessment
 
@@ -524,7 +528,7 @@ DavaForce Engine
 Shortlisted Candidates / Team Options
         |
         v
-Mastra Tools / Optional Agent Wrappers
+Mastra Tools / Optional Router Agent
 (reasoning support, explanation, risks, approval summary)
         |
         v
@@ -543,7 +547,7 @@ LLM / Mastra -> explanation, reasoning, and persona-specific response
 
 # Runtime Pattern
 
-Planning tools and Mastra agents do not remain permanently open as long-running processes. They are called on demand by the Next.js API route or by a Mastra runtime.
+Planning tools and the Workforce Router Agent do not remain permanently open as long-running processes. They are called on demand by the Next.js API route or by a Mastra runtime.
 
 Recommended model:
 
@@ -556,7 +560,7 @@ Long-running:
 
 On-demand:
 - Tool calls
-- Optional agent-wrapper executions
+- Optional Workforce Router Agent execution
 - Scoring functions
 - Explanation generation
 ```
@@ -778,7 +782,7 @@ Recommendations
 RecommendationEvidence
 Sessions
 SessionMemory
-AgentRuns
+ToolRuns
 ```
 
 ## Critical ETL and Planning Rules
@@ -884,7 +888,8 @@ The end-to-end path is conditional. For example, a demand-only question can stop
 * Use OpenAI for final response wording when `OPENAI_API_KEY` is configured
 * Fall back to hardcoded deterministic tool messages when AI is unavailable or not configured
 * Return per-message detail JSON for the workspace panel
-* Render agent-specific evidence dashboards for opportunity, supply, team builder, risk, and approval contracts
+* Render tool-specific evidence dashboards for opportunity, supply, team builder, risk, and approval contracts
+* Render generic DB query results as a tool-specific right-panel table with query metadata and raw JSON
 * Support resizable chat and evidence panels without horizontal overflow
 * Compose dependent tools synchronously when one tool needs another tool's output
 * Recommend suitable candidates based on:
@@ -902,7 +907,7 @@ The end-to-end path is conditional. For example, a demand-only question can stop
   * Balanced Team
 * Highlight confidence scores, risks, capability gaps, and next actions
 * Treat unsupported required skills as explicit no-fill / no-fit risks
-* Use Approval & Decision for EWA, approval, blocker, and final recommendation questions when routed by workspace chat
+* Use the Approval & Decision Tool for EWA, approval, blocker, and final recommendation questions when routed by workspace chat
 * Preserve EWA as the final approval process
 * Keep human judgment at the center of staffing decisions
 
@@ -924,6 +929,6 @@ The end-to-end path is conditional. For example, a demand-only question can stop
 
 # Project Summary
 
-**DavaForce** is a specialist-driven workforce planning solution that imports and normalizes workforce data, analyzes staffing demand, evaluates workforce availability, builds optimized teams, explains recommendations, and supports evidence-based workforce planning.
+**DavaForce** is a tool-driven workforce planning solution that imports and normalizes workforce data, analyzes staffing demand, evaluates workforce availability, builds optimized teams, explains recommendations, and supports evidence-based workforce planning.
 
-The system uses Mastra agents backed by deterministic tools, plus session memory for multi-turn conversations. Final staffing decisions remain under human control through the EWA approval process.
+The system uses the Workforce Router Agent, deterministic tools, and session memory for multi-turn conversations. Final staffing decisions remain under human control through the EWA approval process.

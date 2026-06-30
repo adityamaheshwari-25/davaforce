@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Route a user workforce planning question to the minimum required logical agent path and return the DB-backed JSON produced by deterministic tools.
+Route a user workforce planning question to the minimum required logical tool path and return the DB-backed JSON produced by deterministic tools.
 
 ## Tool Source
 
@@ -81,13 +81,14 @@ Route a user workforce planning question to the minimum required logical agent p
 
 ## Notes
 
-- `plannedAgentPath` is the logical specialist-agent path.
+- `plannedAgentPath` is the legacy field name for the logical specialist-tool path.
+- `executionPlan[].agent`, `agentsToRun`, and `skippedAgents` are legacy field names; their values should name selected tools except for the Workforce Router Agent itself.
 - `executionMode: "tool_orchestrated"` means deterministic tool functions produced the output.
 - `executionMode: "no_db_required"` is used for generic greetings/help.
 - `executionMode: "needs_context"` is used when the user asks a workforce question without `datasetId` or `dbPath`.
 - `executionMode: "blocked"` is used for unsafe/out-of-scope actions such as modifying DB records, bypassing EWA, or auto-approving bookings.
 - `executionMode: "clarification"` is used when intent confidence is too low to choose a route.
-- Null sections are expected for agents that were not needed for the selected route.
+- Null sections are expected for tools that were not needed for the selected route.
 
 ## Output Guardrails
 

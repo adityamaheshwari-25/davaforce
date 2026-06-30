@@ -1,8 +1,8 @@
-# Agent Tools Guide
+# Workforce Sub-Tools Guide
 
 ## Purpose
 
-This folder is the agent-tools layer for workforce agents. Use it before adding new prompt logic or database-facing LLM behavior.
+This folder is the sub-tool layer for workforce tools. Use it before adding new prompt logic or database-facing LLM behavior.
 
 ## Import path
 

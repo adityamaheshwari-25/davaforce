@@ -1,7 +1,6 @@
 flowchart TD
     caller["Router / API / Planner<br/>opportunityId or query,<br/>datasetId or dbPath,<br/>limitPerRole"]
-    agent["Team Builder Agent<br/>Mastra Agent<br/>teamBuilderAgent"]
-    tool["teamBuilderTool<br/>buildTeamOptions()"]
+    tool["Team Builder Tool<br/>Mastra Tool<br/>teamBuilderTool<br/>buildTeamOptions()"]
 
     subgraph upstream["Required Upstream Evidence"]
         direction TB
@@ -23,20 +22,18 @@ flowchart TD
     outputJson["TeamBuilderOutput JSON<br/>opportunity, roleWiseCandidates,<br/>teamOptions, constraints, evidence"]
     downstream["Downstream Consumers<br/>Risk & Insights,<br/>Approval & Decision,<br/>Router final response"]
 
-    caller --> agent --> tool --> assess --> db
+    caller --> tool --> assess --> db
     assess --> sortRoles --> supplyLoop --> db
     supplyLoop --> mergeCandidates --> candidateShape --> rankModes --> buildOptions --> constraints --> outputJson
     outputJson --> downstream
 
     classDef actor fill:#fff7e6,stroke:#c57a00,color:#2b1d00,stroke-width:1px;
-    classDef agentNode fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
     classDef toolNode fill:#fff4e8,stroke:#c96b20,color:#402100,stroke-width:1px;
     classDef control fill:#f4f0ff,stroke:#7b61c9,color:#22173a,stroke-width:1px;
     classDef data fill:#f2f4f7,stroke:#667085,color:#1d2939,stroke-width:1px;
     classDef outputNode fill:#eef5ff,stroke:#356ae6,color:#10213a,stroke-width:1px;
 
     class caller actor;
-    class agent agentNode;
     class tool,assess,supplyLoop toolNode;
     class sortRoles,mergeCandidates,candidateShape,rankModes,buildOptions,constraints control;
     class db data;

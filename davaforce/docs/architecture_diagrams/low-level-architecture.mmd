@@ -5,35 +5,35 @@ flowchart TD
     contextAsm["Context Assembler"]
     memoryLookup["Session Memory Lookup"]
     changeDetector["Change Detector"]
-    executionPolicy["Selective Execution Policy<br/>run only agents affected by this turn"]
+    executionPolicy["Selective Execution Policy<br/>run only tools affected by this turn"]
     orchestrator["Mastra Workflow Orchestrator"]
     memoryUpdate["Memory Update"]
     response["Recommendation Package<br/>team options, evidence, risks,<br/>EWA status, next actions"]
-    runtimeNote["Runtime reads normalized tables only;<br/>agents never read Excel directly"]
+    runtimeNote["Runtime reads normalized tables only;<br/>tools never read Excel directly"]
 
     planner --> workspace --> api --> contextAsm --> memoryLookup --> changeDetector --> executionPolicy --> orchestrator
 
     subgraph memory["Conversation and Runtime Memory"]
         direction LR
         sessionStore[("Session Memory<br/>active opportunity, filters,<br/>persona, previous responses")]
-        agentStore[("Agent Memory<br/>requirements, shortlists,<br/>team options, explanations")]
-        runStore[("Recommendations and AgentRuns<br/>audit trail, replay, approval state")]
+        toolStore[("Tool Memory<br/>requirements, shortlists,<br/>team options, explanations")]
+        runStore[("Recommendations and ToolRuns<br/>audit trail, replay, approval state")]
     end
 
     sessionStore --> memoryLookup
-    agentStore --> memoryLookup
+    toolStore --> memoryLookup
     orchestrator --> memoryUpdate
     memoryUpdate --> sessionStore
-    memoryUpdate --> agentStore
+    memoryUpdate --> toolStore
     memoryUpdate --> runStore
 
-    subgraph agents["Agent Execution Graph"]
+    subgraph toolGraph["Tool Execution Graph"]
         direction LR
-        oa["1. Opportunity Assessment Agent<br/>extract roles, skills, grade,<br/>location, timeline, FTE"]
-        rs["2. Resource Supply Agent<br/>bench, partial capacity,<br/>30/60/90-day supply"]
-        tb["3. Team Builder Agent<br/>best fit, fastest available,<br/>balanced team options"]
-        ri["4. Risk & Insights Agent<br/>confidence, gaps, bench impact,<br/>availability risk, next actions"]
-        ad["5. Approval & Decision Agent<br/>EWA summary, approval package,<br/>final recommendation"]
+        oa["1. Opportunity Assessment Tool<br/>extract roles, skills, grade,<br/>location, timeline, FTE"]
+        rs["2. Resource Supply Tool<br/>bench, partial capacity,<br/>30/60/90-day supply"]
+        tb["3. Team Builder Tool<br/>best fit, fastest available,<br/>balanced team options"]
+        ri["4. Risk & Insights Tool<br/>confidence, gaps, bench impact,<br/>availability risk, next actions"]
+        ad["5. Approval & Decision Tool<br/>EWA summary, approval package,<br/>final recommendation"]
     end
 
     orchestrator -->|parallel start| oa
@@ -105,7 +105,7 @@ flowchart TD
     classDef actor fill:#fff7e6,stroke:#c57a00,color:#2b1d00,stroke-width:1px;
     classDef frontend fill:#eef5ff,stroke:#356ae6,color:#10213a,stroke-width:1px;
     classDef control fill:#f4f0ff,stroke:#7b61c9,color:#22173a,stroke-width:1px;
-    classDef agent fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
+    classDef routedTool fill:#e8fbf3,stroke:#178a5d,color:#0f2f20,stroke-width:1px;
     classDef tool fill:#fff4e8,stroke:#c96b20,color:#402100,stroke-width:1px;
     classDef data fill:#f2f4f7,stroke:#667085,color:#1d2939,stroke-width:1px;
     classDef memoryNode fill:#fff8d6,stroke:#b58b00,color:#3a2e00,stroke-width:1px;
@@ -114,8 +114,8 @@ flowchart TD
     class planner actor;
     class workspace,response frontend;
     class api,contextAsm,memoryLookup,changeDetector,executionPolicy,orchestrator,memoryUpdate control;
-    class oa,rs,tb,ri,ad agent;
+    class oa,rs,tb,ri,ad routedTool;
     class availability,capacity,forecast,skills,scoring,teamBuild,risk,explain,ewa tool;
     class prisma,normalizedDb,excel,importScripts,rawTables data;
-    class sessionStore,agentStore,runStore memoryNode;
+    class sessionStore,toolStore,runStore memoryNode;
     class runtimeNote note;

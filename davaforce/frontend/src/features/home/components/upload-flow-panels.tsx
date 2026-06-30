@@ -301,7 +301,7 @@ export function SuccessPanel({ file }: { file: File | null }) {
       </motion.div>
       <h2 className="mt-8 font-display text-4xl font-semibold text-[var(--home-text)]">Data processing done</h2>
       <p className="mt-3 max-w-md text-sm text-[var(--home-muted)]">
-        {file?.name ?? "Your workbook"} is normalized and ready for questions.
+        {file?.name ?? "Your workbook"} is normalized and ready for table validation.
       </p>
     </motion.div>
   );

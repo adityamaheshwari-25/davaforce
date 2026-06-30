@@ -9,6 +9,7 @@ import { WorkspaceTopNav } from "@/components/shell/workspace-top-nav";
 import { Button } from "@/components/ui/button";
 import { useMovingGlowBorder } from "@/hooks/use-moving-glow-border";
 import { useWebSpeechInput } from "@/hooks/use-web-speech-input";
+import { isDatasetSchemaValidated } from "@/lib/workforce-schema-validation";
 
 export default function AskPage() {
   const router = useRouter();
@@ -25,22 +26,45 @@ export default function AskPage() {
   });
 
   useEffect(() => {
-    const storedUser = window.localStorage.getItem("workforceUser");
-    const datasetId = window.localStorage.getItem("workforceDatasetId");
-    if (!storedUser) {
-      router.replace("/");
-      return;
-    }
-    if (!datasetId) {
-      router.replace("/?action=upload");
-      return;
-    }
+    let cancelled = false;
 
-    const storedSource = window.localStorage.getItem("workforceDatasetName");
-    if (storedSource) {
-      setSourceName(storedSource);
-    }
-    setIsCheckingAccess(false);
+    const checkAccess = async () => {
+      const storedUser = window.localStorage.getItem("workforceUser");
+      const datasetId = window.localStorage.getItem("workforceDatasetId");
+      if (!storedUser) {
+        router.replace("/");
+        return;
+      }
+      if (!datasetId) {
+        router.replace("/?action=upload");
+        return;
+      }
+
+      try {
+        const parsedUser = JSON.parse(storedUser) as { userId?: string } | null;
+        const userId = parsedUser?.userId ?? "";
+        if (!userId || !(await isDatasetSchemaValidated(userId, datasetId))) {
+          router.replace("/validate");
+          return;
+        }
+      } catch {
+        router.replace("/validate");
+        return;
+      }
+
+      if (cancelled) return;
+      const storedSource = window.localStorage.getItem("workforceDatasetName");
+      if (storedSource) {
+        setSourceName(storedSource);
+      }
+      setIsCheckingAccess(false);
+    };
+
+    void checkAccess();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {

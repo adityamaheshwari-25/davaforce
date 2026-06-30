@@ -180,7 +180,7 @@ The system shall support persona-relevant views or prompts for at least workforc
 
 The system shall hand off a user's first question from `/ask` into `/workspace`, preserve the active dataset context, and create or continue the relevant planning conversation.
 
-The system shall display agent-specific evidence in the workspace detail panel using the structured JSON returned by the backend contract for opportunity assessment, resource supply, team builder, risk insights, and approval decision responses.
+The system shall display tool-specific evidence in the workspace detail panel using the structured JSON returned by the backend contract for opportunity assessment, resource supply, team builder, risk insights, approval decision, and generic DB query responses.
 
 The system shall support a resizable chat and evidence layout so users can expand the chat panel or detail panel without horizontal overflow.
 
@@ -235,7 +235,7 @@ The system shall provide concise operational views of opportunity demand, supply
 - Risk and Insights Module
 - Approval and EWA Support Module
 - Ask and Chat Workspace Module
-- Agent Evidence Detail Panel Module
+- Tool Evidence Detail Panel Module
 - Planning Dashboard Module
 - Dataset Validation and Reference Module
 
@@ -252,7 +252,8 @@ The first release shall include:
 - Risk, gap, and confidence explanations.
 - Human approval support with EWA visibility.
 - `/ask` entry flow that hands the first question into the chat workspace.
-- Workspace chat with conversation history, active dataset context, and agent-specific evidence UI.
+- Workspace chat with conversation history, active dataset context, and tool-specific evidence UI.
+- Generic DB query answers with a JSON contract and right-panel result table for safe read-only questions over uploaded tables.
 - Resizable chat and detail panels for comparing recommendations and inspecting JSON-backed evidence.
 - Static dashboard for reviewing uploaded dataset snapshots.
 
@@ -276,7 +277,7 @@ The first release shall NOT include:
 
 # 11. Future Enhancements
 
-- Hosted Mastra agent execution as a replacement for the current deterministic workspace route
+- Hosted Workforce Router Agent execution as a replacement for the current deterministic workspace route
 - Skills gap analysis
 - Workforce forecasting
 - Bench risk prediction
@@ -294,7 +295,7 @@ The first release shall NOT include:
 5. The ask flow hands the prompt and active dataset into `/workspace`.
 6. The workspace chat route classifies the question, runs the required deterministic planning tools, and stores the conversation.
 7. The chat panel shows the answer and conversation history.
-8. The detail panel renders the structured JSON contract as an agent-specific evidence UI.
+8. The detail panel renders the structured JSON contract as a tool-specific evidence UI.
 9. The user can resize the chat and detail panels to compare messages, metrics, tables, charts, risks, and raw contract evidence.
 10. The user can open `/dashboard` to review static dataset-level supply, demand, staffing-fit, skills, and EWA views.
 11. The user can preview raw Excel rows or download the original workbook from the dashboard when source-data inspection is needed.

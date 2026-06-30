@@ -22,6 +22,8 @@ type LocalRoutes = {
   workforcePATCH: (request: Request) => Promise<Response>;
   workforcePOST: (request: Request) => Promise<Response>;
   workforceRawGET: (request: Request) => Promise<Response>;
+  workforceSchemaValidationGET: (request: Request) => Promise<Response>;
+  workforceSchemaValidationPOST: (request: Request) => Promise<Response>;
 };
 
 const notFound = () => Response.json({ status: "failure", error: "API route not found." }, { status: 404 });
@@ -66,6 +68,8 @@ async function loadLocalRoutes(): Promise<LocalRoutes> {
     workforcePATCH: datasetsRoute.PATCH,
     workforcePOST: datasetsRoute.POST,
     workforceRawGET: datasetsRoute.GET_RAW,
+    workforceSchemaValidationGET: datasetsRoute.GET_SCHEMA_VALIDATION,
+    workforceSchemaValidationPOST: datasetsRoute.POST_SCHEMA_VALIDATION,
   };
 }
 
@@ -88,6 +92,7 @@ export async function GET(request: Request, context: RouteContext) {
   if (apiPath === "workforce-datasets/events") return routes.workforceEventsGET(request);
   if (apiPath === "workforce-datasets/raw") return routes.workforceRawGET(request);
   if (apiPath === "workforce-datasets/download") return routes.workforceDownloadGET(request);
+  if (apiPath === "workforce-datasets/schema-validation") return routes.workforceSchemaValidationGET(request);
   if (apiPath === "workforce-datasets/dashboard" || apiPath.startsWith("workforce-datasets/dashboard/")) {
     return routes.workforceDashboardGET(request, apiPath.split("/").slice(2));
   }
@@ -112,6 +117,7 @@ export async function POST(request: Request, context: RouteContext) {
   if (apiPath === "auth/login") return routes.loginPOST(request);
   if (apiPath === "auth/roles") return routes.authRolesPOST(request);
   if (apiPath === "workforce-chat") return routes.workforceChatPOST(request);
+  if (apiPath === "workforce-datasets/schema-validation") return routes.workforceSchemaValidationPOST(request);
   if (apiPath === "workforce-datasets") return routes.workforcePOST(request);
   return notFound();
 }

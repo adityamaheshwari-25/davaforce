@@ -1,4 +1,4 @@
-# Risk & Insights Agent Contract
+# Risk & Insights Tool Contract
 
 ## Purpose
 
@@ -6,7 +6,6 @@ Evaluate staffing options for risk, confidence, capability gaps, availability ri
 
 ## Tool Source
 
-- Agent: `riskInsightsAgent`
 - Tool: `riskInsightsTool`
 - Source schema: `riskInsightsOutputSchema`
 
@@ -102,5 +101,5 @@ Evaluate staffing options for risk, confidence, capability gaps, availability ri
 
 ## Notes
 
-- This agent evaluates and explains risk; it does not approve staffing.
+- This tool evaluates and explains risk; it does not approve staffing.
 - Capability and availability risks should be kept separate.

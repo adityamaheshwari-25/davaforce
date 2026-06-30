@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, History, Loader2, Mic, MicOff, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
-import { useMemo, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, ArrowRight, History, Loader2, Mic, MicOff, Plus, Search, Sparkles, Square, Trash2, Upload, Volume2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -98,6 +98,13 @@ function AssistantMarkdown({ text }: { text: string }) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
+const speechText = (value: string) =>
+  value
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
 export function WorkspaceChatPanel({
   chatEndRef,
   chatInput,
@@ -126,6 +133,7 @@ export function WorkspaceChatPanel({
   const [historySearch, setHistorySearch] = useState("");
   const [pendingDeleteConversation, setPendingDeleteConversation] = useState<ChatConversationSummary | null>(null);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const voiceInput = useWebSpeechInput({
     disabled: !canSendMessage,
     onChange: onChatInputChange,
@@ -149,6 +157,41 @@ export function WorkspaceChatPanel({
       return haystack.includes(query);
     });
   }, [conversations, historySearch]);
+  const speechSupported =
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window &&
+    "SpeechSynthesisUtterance" in window;
+
+  useEffect(
+    () => () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    },
+    [],
+  );
+
+  const toggleSpeech = (message: ChatMessage) => {
+    if (!speechSupported || message.role !== "ai") return;
+
+    if (speakingMessageId === message.id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    const textToRead = speechText(message.text);
+    if (!textToRead) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToRead);
+    utterance.rate = 0.96;
+    utterance.pitch = 1;
+    utterance.onend = () => setSpeakingMessageId((current) => (current === message.id ? null : current));
+    utterance.onerror = () => setSpeakingMessageId((current) => (current === message.id ? null : current));
+    setSpeakingMessageId(message.id);
+    window.speechSynthesis.speak(utterance);
+  };
 
   return (
     <>
@@ -241,27 +284,39 @@ export function WorkspaceChatPanel({
               </div>
               <div className="rounded-xl rounded-tl-sm border border-[var(--home-border)] bg-[var(--home-soft)] px-3 py-2.5 text-sm text-[var(--home-text)]">
                 <AssistantMarkdown text={message.text} />
-                {message.detailView ? (() => {
-                  const isDetailOpen = Boolean(message.details && selectedDetails === message.details);
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--home-border)] text-[var(--home-muted)] hover:bg-[var(--home-panel)] hover:text-[var(--home-text)] disabled:cursor-not-allowed disabled:opacity-45"
+                    onClick={() => toggleSpeech(message)}
+                    disabled={!speechSupported}
+                    aria-label={speakingMessageId === message.id ? "Stop reading message" : "Read message aloud"}
+                    title={speechSupported ? (speakingMessageId === message.id ? "Stop reading" : "Read aloud") : "Text to speech is not supported in this browser"}
+                  >
+                    {speakingMessageId === message.id ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                  </button>
+                  {message.detailView ? (() => {
+                    const isDetailOpen = Boolean(message.details && selectedDetails === message.details);
 
-                  return (
-                    <button
-                      type="button"
-                      className="mt-2 inline-flex items-center gap-1 rounded-full border border-brand/30 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/10"
-                      onClick={() => onSelectDetail(message.detailView ?? null, message.details ?? null)}
-                    >
-                      {isDetailOpen ? (
-                        <>
-                          Hide details <ArrowLeft className="h-3 w-3" />
-                        </>
-                      ) : (
-                        <>
-                          View details <ArrowRight className="h-3 w-3" />
-                        </>
-                      )}
-                    </button>
-                  );
-                })() : null}
+                    return (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full border border-brand/30 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/10"
+                        onClick={() => onSelectDetail(message.detailView ?? null, message.details ?? null)}
+                      >
+                        {isDetailOpen ? (
+                          <>
+                            Hide details <ArrowLeft className="h-3 w-3" />
+                          </>
+                        ) : (
+                          <>
+                            View details <ArrowRight className="h-3 w-3" />
+                          </>
+                        )}
+                      </button>
+                    );
+                  })() : null}
+                </div>
               </div>
             </motion.div>
           ),
