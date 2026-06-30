@@ -180,7 +180,7 @@ The system shall support persona-relevant views or prompts for at least workforc
 
 The system shall hand off a user's first question from `/ask` into `/workspace`, preserve the active dataset context, and create or continue the relevant planning conversation.
 
-The system shall display tool-specific evidence in the workspace detail panel using the structured JSON returned by the backend contract for opportunity assessment, resource supply, team builder, risk insights, approval decision, and generic DB query responses.
+The system shall display tool-specific evidence in the workspace detail panel using the structured JSON returned by the backend contract for opportunity assessment, resource supply, team builder, risk insights, and approval decision responses.
 
 The system shall support a resizable chat and evidence layout so users can expand the chat panel or detail panel without horizontal overflow.
 
@@ -253,7 +253,6 @@ The first release shall include:
 - Human approval support with EWA visibility.
 - `/ask` entry flow that hands the first question into the chat workspace.
 - Workspace chat with conversation history, active dataset context, and tool-specific evidence UI.
-- Generic DB query answers with a JSON contract and right-panel result table for safe read-only questions over uploaded tables.
 - Resizable chat and detail panels for comparing recommendations and inspecting JSON-backed evidence.
 - Static dashboard for reviewing uploaded dataset snapshots.
 

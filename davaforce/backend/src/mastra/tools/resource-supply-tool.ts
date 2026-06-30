@@ -13,6 +13,17 @@ import {
 type Row = Record<string, unknown>;
 type BenchMovementWeekOutput = ResourceSupplyOutput["benchMovement"][number];
 type ScenarioTargetStatusOutput = ResourceSupplyOutput["scenarioTargets"][number];
+type EwaRequestEvidence = {
+  opportunityRoleId: string;
+  roleName: string;
+  requestType: string;
+  ewaStatus: string;
+  requestedFte: number;
+  proposedStartDate: string;
+  approvalRequired: boolean;
+  blockingReason: string;
+  nextAction: string;
+};
 
 const makeDb = (dbPath: string) => new DatabaseSync(dbPath, { readOnly: true });
 
@@ -31,6 +42,7 @@ const splitList = (value: unknown) =>
     .filter(Boolean);
 
 const unique = (values: string[]) => [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+const boolValue = (value: unknown) => Boolean(Number(value ?? 0));
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const containsSignal = (haystack: string, signal: string) =>
   new RegExp(`(^|[^a-z0-9+#])${escapeRegExp(signal.toLowerCase())}([^a-z0-9+#]|$)`).test(haystack);
@@ -66,6 +78,52 @@ const isSkillEvidenceLookup = (query: string | undefined, skills: string[]) => {
   );
 };
 
+const isSkillFocusedQuery = (query: string | undefined, skills: string[]) =>
+  skills.length > 0 && /\b(skill|skills|skilled|experience|experienced|with)\b/i.test(text(query));
+
+const trimSentence = (value: unknown, maxLength = 180) => {
+  const normalized = text(value).replace(/\s+/g, " ");
+  if (!normalized) return "";
+  const clipped = normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trim()}...` : normalized;
+  return clipped.replace(/[.;,\s]+$/, "");
+};
+
+const firstListItems = (value: unknown, limit = 4) =>
+  splitList(value)
+    .slice(0, limit)
+    .map((item) => trimSentence(item, 80))
+    .join(", ");
+
+const readRoleSkillRequirements = (
+  db: DatabaseSync,
+  roleId: string,
+  fallbackRequired: unknown,
+  fallbackDesired: unknown,
+) => {
+  const rows = all(
+    db,
+    `
+    SELECT skillName, importance
+    FROM "OpportunityRoleSkillRequirement"
+    WHERE opportunityRoleId = ?
+    ORDER BY CASE importance WHEN 'REQUIRED' THEN 0 ELSE 1 END, skillName ASC
+    `,
+    [roleId],
+  );
+
+  if (rows.length === 0) {
+    return {
+      requiredSkills: unique(splitList(fallbackRequired)),
+      desiredSkills: unique(splitList(fallbackDesired)),
+    };
+  }
+
+  return {
+    requiredSkills: unique(rows.filter((row) => text(row.importance).toLowerCase() === "required").map((row) => text(row.skillName))),
+    desiredSkills: unique(rows.filter((row) => text(row.importance).toLowerCase() !== "required").map((row) => text(row.skillName))),
+  };
+};
+
 const extractQuerySignals = (db: DatabaseSync, query?: string) => {
   const normalizedQuery = ` ${text(query).toLowerCase()} `;
   const skillRows = all(db, "SELECT name FROM SkillCatalog ORDER BY length(name) DESC").filter((row) =>
@@ -90,10 +148,19 @@ const extractQuerySignals = (db: DatabaseSync, query?: string) => {
     ORDER BY discipline
     `,
   ).filter((row) => containsSignal(normalizedQuery, text(row.discipline)));
+  const domainRows = all(
+    db,
+    `
+    SELECT DISTINCT primaryDomain AS domain
+    FROM Person
+    ORDER BY domain
+    `,
+  ).filter((row) => containsSignal(normalizedQuery, text(row.domain)));
   const windowMatch = /(?:in|within|next)\s+(\d{1,3})\s*(?:day|days)/i.exec(text(query));
 
   return {
     skills: unique(skillRows.map((row) => text(row.name))),
+    domains: unique(domainRows.map((row) => text(row.domain))),
     locations: unique(locationRows.map((row) => text(row.location))),
     disciplines: unique(disciplineRows.map((row) => text(row.discipline))),
     availabilityWindowDays: windowMatch ? Number(windowMatch[1]) : null,
@@ -113,6 +180,7 @@ const roleContext = (db: DatabaseSync, input: ResourceSupplyInput) => {
       [input.roleId],
     );
     if (role) {
+      const roleSkills = readRoleSkillRequirements(db, text(role.id), role.requiredSkillsText, role.desiredSkillsText);
       return {
         opportunityId: text(role.opportunityId),
         roleId: text(role.id),
@@ -121,7 +189,7 @@ const roleContext = (db: DatabaseSync, input: ResourceSupplyInput) => {
         grade: text(role.gradePreference),
         location: text(role.locationPreference) || text(role.city) || text(role.country) || text(role.region),
         domain: text(role.domainExperienceRequired) || text(role.domain),
-        skills: unique(splitList(role.requiredSkillsText).concat(splitList(role.desiredSkillsText))),
+        skills: unique(roleSkills.requiredSkills.concat(roleSkills.desiredSkills)),
         minFte: numberValue(role.minimumIndividualFte) || numberValue(role.fteRequired) || 0.1,
       };
     }
@@ -130,6 +198,10 @@ const roleContext = (db: DatabaseSync, input: ResourceSupplyInput) => {
   if (input.opportunityId) {
     const opportunity = get(db, 'SELECT * FROM "Opportunity" WHERE id = ?', [input.opportunityId]);
     const roles = all(db, 'SELECT * FROM "OpportunityRole" WHERE opportunityId = ?', [input.opportunityId]);
+    const roleSkills = roles.flatMap((row) => {
+      const skills = readRoleSkillRequirements(db, text(row.id), row.requiredSkillsText, row.desiredSkillsText);
+      return skills.requiredSkills.concat(skills.desiredSkills);
+    });
     return {
       opportunityId: input.opportunityId,
       roleId: null,
@@ -140,7 +212,7 @@ const roleContext = (db: DatabaseSync, input: ResourceSupplyInput) => {
         roles.map((row) => text(row.locationPreference)).concat([text(opportunity?.city), text(opportunity?.country)]),
       ).join("; ") || null,
       domain: text(opportunity?.domain) || null,
-      skills: unique(roles.flatMap((row) => splitList(row.requiredSkillsText).concat(splitList(row.desiredSkillsText)))),
+      skills: unique(roleSkills),
       minFte: 0.1,
     };
   }
@@ -179,6 +251,182 @@ const skillsByPerson = (db: DatabaseSync) => {
     byPerson.set(personId, bucket);
   }
   return byPerson;
+};
+
+const profilesByPerson = (db: DatabaseSync) =>
+  new Map(
+    all(
+      db,
+      `
+      SELECT personId, profileSummary, keyStrengthsText, domainExperienceSummary,
+             certificationsText, recentHighlights, mobilityNotes, languagesText
+      FROM "Profile"
+      `,
+    ).map((row) => [text(row.personId), row]),
+  );
+
+const allocationsByPerson = (db: DatabaseSync) =>
+  new Map(
+    all(
+      db,
+      `
+      SELECT personId, clientName, projectName, domain, roleOnProject, allocationFte,
+             plannedEndDate, allocationStatus, ewaStatus
+      FROM "CurrentAllocation"
+      `,
+    ).map((row) => [text(row.personId), row]),
+  );
+
+const projectHistoryByPerson = (db: DatabaseSync) => {
+  const byPerson = new Map<string, Row[]>();
+  for (const row of all(
+    db,
+    `
+    SELECT personId, clientName, projectName, domain, role, endDate,
+           keyTechnologiesOrMethods, responsibilities, outcomeEvidence
+    FROM "ProjectHistory"
+    ORDER BY personId ASC, endDate DESC
+    `,
+  )) {
+    const personId = text(row.personId);
+    const bucket = byPerson.get(personId) ?? [];
+    bucket.push(row);
+    byPerson.set(personId, bucket);
+  }
+  return byPerson;
+};
+
+const ewaRequestsByPerson = (db: DatabaseSync, opportunityId: string | null, roleId: string | null) => {
+  const byPerson = new Map<string, EwaRequestEvidence[]>();
+  if (!opportunityId) return byPerson;
+
+  const rows = all(
+    db,
+    `
+    SELECT e.personId, e.opportunityRoleId, r.roleName, e.requestType, e.ewaStatus,
+           e.requestedFte, e.proposedStartDate, e.approvalRequired, e.blockingReason,
+           e.nextAction
+    FROM "EwaRequest" e
+    JOIN "OpportunityRole" r ON r.id = e.opportunityRoleId
+    WHERE e.opportunityId = ?
+      AND (? IS NULL OR e.opportunityRoleId = ?)
+    ORDER BY e.personId ASC,
+             CASE
+               WHEN e.ewaStatus = 'Blocked' THEN 0
+               WHEN e.ewaStatus = 'Pending Approval' THEN 1
+               WHEN e.ewaStatus = 'Draft' THEN 2
+               ELSE 3
+             END,
+             e.proposedStartDate ASC
+    `,
+    [opportunityId, roleId, roleId],
+  );
+
+  for (const row of rows) {
+    const personId = text(row.personId);
+    const bucket = byPerson.get(personId) ?? [];
+    bucket.push({
+      opportunityRoleId: text(row.opportunityRoleId),
+      roleName: text(row.roleName),
+      requestType: text(row.requestType),
+      ewaStatus: text(row.ewaStatus),
+      requestedFte: numberValue(row.requestedFte),
+      proposedStartDate: text(row.proposedStartDate),
+      approvalRequired: boolValue(row.approvalRequired),
+      blockingReason: text(row.blockingReason),
+      nextAction: text(row.nextAction),
+    });
+    byPerson.set(personId, bucket);
+  }
+  return byPerson;
+};
+
+const ewaRank = (status: string) => {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("blocked")) return 0;
+  if (normalized.includes("pending")) return 1;
+  if (normalized.includes("draft")) return 2;
+  return 3;
+};
+
+const preferredEwaRequest = (requests: EwaRequestEvidence[]) =>
+  [...requests].sort((left, right) => ewaRank(left.ewaStatus) - ewaRank(right.ewaStatus) || left.proposedStartDate.localeCompare(right.proposedStartDate))[0] ?? null;
+
+const profileEvidence = (profile: Row | undefined) => {
+  if (!profile) return [];
+  return [
+    trimSentence(profile.profileSummary) ? `Profile: ${trimSentence(profile.profileSummary)}.` : "",
+    firstListItems(profile.keyStrengthsText) ? `Strengths: ${firstListItems(profile.keyStrengthsText)}.` : "",
+    trimSentence(profile.domainExperienceSummary) ? `Domain experience: ${trimSentence(profile.domainExperienceSummary)}.` : "",
+    trimSentence(profile.recentHighlights) ? `Recent highlight: ${trimSentence(profile.recentHighlights)}.` : "",
+  ].filter(Boolean);
+};
+
+const allocationEvidence = (allocation: Row | undefined) => {
+  if (!allocation) return [];
+  const project = trimSentence(allocation.projectName) || "current project";
+  const client = trimSentence(allocation.clientName) || "current client";
+  return [
+    `Current allocation: ${trimSentence(allocation.roleOnProject) || "assigned role"} on ${project} for ${client}, ${numberValue(
+      allocation.allocationFte,
+    )} FTE, status ${text(allocation.allocationStatus) || "unknown"}${text(allocation.plannedEndDate) ? `, planned end ${text(allocation.plannedEndDate)}` : ""}.`,
+    text(allocation.ewaStatus) ? `Current-allocation EWA status: ${text(allocation.ewaStatus)}.` : "",
+  ].filter(Boolean);
+};
+
+const partialCapacityEvidence = (row: Row) => {
+  if (row.partialBenchFte == null) return [];
+  return [
+    `Partial capacity view: ${numberValue(row.partialBenchFte)} FTE (${numberValue(row.partialBenchPercent)}%), risk ${
+      text(row.partialBenchRisk) || "unknown"
+    }, view ${text(row.partialViewType) || "Partial Capacity"}.`,
+  ];
+};
+
+const projectHistoryScore = (row: Row, domain: string | null, skills: string[]) => {
+  const haystack = [
+    row.clientName,
+    row.projectName,
+    row.domain,
+    row.role,
+    row.keyTechnologiesOrMethods,
+    row.responsibilities,
+    row.outcomeEvidence,
+  ]
+    .map((value) => text(value).toLowerCase())
+    .join(" ");
+
+  const domainScore = domain && text(row.domain).toLowerCase() === domain.toLowerCase() ? 3 : 0;
+  const skillScore = skills.filter((skill) => containsSignalOrToken(haystack, skill)).length;
+  return domainScore + skillScore;
+};
+
+const projectHistoryEvidence = (historyRows: Row[] | undefined, domain: string | null, skills: string[]) => {
+  if (!historyRows?.length) return [];
+  const history = [...historyRows].sort(
+    (left, right) =>
+      projectHistoryScore(right, domain, skills) - projectHistoryScore(left, domain, skills) ||
+      text(right.endDate).localeCompare(text(left.endDate)),
+  )[0];
+  if (!history) return [];
+
+  const methods = trimSentence(history.keyTechnologiesOrMethods, 110);
+  const outcome = trimSentence(history.outcomeEvidence, 120);
+  return [
+    `Project history: ${trimSentence(history.role) || "delivery role"} on ${trimSentence(history.projectName) || "past project"} for ${
+      trimSentence(history.clientName) || "client"
+    }${text(history.domain) ? ` (${text(history.domain)})` : ""}${methods ? `, using ${methods}` : ""}${outcome ? `; outcome ${outcome}` : ""}.`,
+  ];
+};
+
+const ewaEvidence = (request: EwaRequestEvidence | null) => {
+  if (!request) return [];
+  return [
+    `EWA request source-of-truth: ${request.ewaStatus} for ${request.roleName}, ${request.requestType}, ${request.requestedFte} FTE starting ${request.proposedStartDate}.`,
+    request.blockingReason ? `EWA blocker: ${request.blockingReason}.` : "",
+    request.approvalRequired ? "EWA approval is required before booking." : "",
+    request.nextAction ? `EWA next action: ${request.nextAction}.` : "",
+  ].filter(Boolean);
 };
 
 const capacityByWindow = (db: DatabaseSync) =>
@@ -290,12 +538,13 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
   try {
     const querySignals = extractQuerySignals(db, input.query);
     const context = roleContext(db, input);
-    const skills = unique([...(input.skills ?? []), ...(context?.skills ?? []), ...querySignals.skills]);
+    const skills = unique([...(input.skills ?? []), ...(context?.skills ?? []), ...querySignals.skills, ...querySignals.domains]);
     const isOpportunityWideSearch = Boolean((context?.opportunityId ?? input.opportunityId) && !(context?.roleId ?? input.roleId));
     const location = input.location ?? querySignals.locations[0] ?? (isOpportunityWideSearch ? null : context?.location) ?? null;
     const domain = input.domain ?? (isOpportunityWideSearch ? null : context?.domain) ?? null;
     const grade = input.grade ?? (isOpportunityWideSearch ? null : context?.grade) ?? null;
-    const discipline = input.discipline ?? (isOpportunityWideSearch ? null : context?.discipline) ?? querySignals.disciplines[0] ?? null;
+    const queryDiscipline = isSkillFocusedQuery(input.query, querySignals.skills) ? null : querySignals.disciplines[0];
+    const discipline = input.discipline ?? (isOpportunityWideSearch ? null : context?.discipline) ?? queryDiscipline ?? null;
     const todayIso = input.asOfDate ?? new Date().toISOString().slice(0, 10);
     const availabilityWindowDays = input.availabilityWindowDays ?? querySignals.availabilityWindowDays ?? 30;
     const targetDate = addUtcDays(asUtcDate(todayIso), availabilityWindowDays).toISOString().slice(0, 10);
@@ -309,6 +558,14 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
     const limit = input.limit ?? 20;
     const weeklyFte = weeklyAvailabilityByPerson(db, targetDate);
     const personSkills = skillsByPerson(db);
+    const personProfiles = profilesByPerson(db);
+    const personAllocations = allocationsByPerson(db);
+    const personHistory = projectHistoryByPerson(db);
+    const personEwaRequests = ewaRequestsByPerson(
+      db,
+      context?.opportunityId ?? input.opportunityId ?? null,
+      context?.roleId ?? input.roleId ?? null,
+    );
 
     const rows = all(
       db,
@@ -319,10 +576,14 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
              pas.currentAllocationFte, pas.ewaStatus,
              s.availableFrom, s.supplyFte, s.supplyRisk, s.timeOnSupplyDays, s.suggestedAction, s.targetRoleFit,
              co.rank AS overlayRank, co.overallStaffingScore AS overlayScore, co.fitStatus,
-             co.availableFteAtStart, co.fteGap, co.rationale, co."constraint" AS candidateConstraint
+             co.availableFteAtStart, co.fteGap, co.rationale, co."constraint" AS candidateConstraint,
+             co.ewaStatus AS overlayEwaStatus, co.plannerNotes,
+             pc.benchFte AS partialBenchFte, pc.benchPercent AS partialBenchPercent,
+             pc.benchRisk AS partialBenchRisk, pc.viewType AS partialViewType
       FROM "Person" p
       JOIN "PersonAvailabilitySnapshot" pas ON pas.personId = p.id
       LEFT JOIN "SupplyRecord" s ON s.personId = p.id
+      LEFT JOIN "PartialCapacityView" pc ON pc.personId = p.id
       LEFT JOIN (
         SELECT *
         FROM (
@@ -350,17 +611,30 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
         numberValue(row.availableFteAtStart),
       );
       const skillRows = personSkills.get(personId) ?? [];
-      const matchedSkills = skills.length
+      const matchedSkillEvidence = skills.length
         ? skillRows
             .filter((skill) => skills.some((needed) => text(skill.skillName).toLowerCase() === needed.toLowerCase()))
             .map((skill) => text(skill.skillName))
         : skillRows.slice(0, 5).map((skill) => text(skill.skillName));
+      const matchedDomains = skills.filter((needed) => text(row.primaryDomain).toLowerCase() === needed.toLowerCase());
+      const matchedSkills = unique([...matchedSkillEvidence, ...matchedDomains]);
       const skillMatchCount = skills.length ? matchedSkills.length : 0;
       const skillMatchScore = skills.length ? Math.round((skillMatchCount / skills.length) * 100) : 0;
+      const ewaRequest = preferredEwaRequest(personEwaRequests.get(personId) ?? []);
+      const ewaStatus = ewaRequest?.ewaStatus || text(row.overlayEwaStatus) || text(row.ewaStatus);
+      const candidateDomain = domain ?? (text(row.primaryDomain) || null);
       const evidence = [
         `Availability ${availableFteInWindow} FTE by ${targetDate}.`,
         matchedSkills.length > 0 ? `Matched skills: ${unique(matchedSkills).join(", ")}.` : "No requested skill match found.",
         row.overlayScore != null ? `Overlay score ${numberValue(row.overlayScore)} rank ${numberValue(row.overlayRank)}.` : "",
+        trimSentence(row.rationale) ? `Overlay rationale: ${trimSentence(row.rationale)}.` : "",
+        trimSentence(row.candidateConstraint) ? `Overlay constraint: ${trimSentence(row.candidateConstraint)}.` : "",
+        trimSentence(row.plannerNotes) ? `Planner notes: ${trimSentence(row.plannerNotes)}.` : "",
+        ...ewaEvidence(ewaRequest),
+        ...profileEvidence(personProfiles.get(personId)),
+        ...allocationEvidence(personAllocations.get(personId)),
+        ...partialCapacityEvidence(row),
+        ...projectHistoryEvidence(personHistory.get(personId), candidateDomain, skills),
         text(row.suggestedAction) ? `Supply action: ${text(row.suggestedAction)}.` : "",
       ].filter(Boolean);
 
@@ -381,7 +655,7 @@ export function findResourceSupply(input: ResourceSupplyInput): ResourceSupplyOu
         supplyFte: row.supplyFte == null ? null : numberValue(row.supplyFte),
         availableFteInWindow,
         currentAllocationFte: numberValue(row.currentAllocationFte),
-        ewaStatus: text(row.ewaStatus),
+        ewaStatus,
         benchRisk: row.supplyRisk == null ? null : text(row.supplyRisk),
         timeOnBenchDays: row.timeOnSupplyDays == null ? null : numberValue(row.timeOnSupplyDays),
         matchedSkills: unique(matchedSkills),

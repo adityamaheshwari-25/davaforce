@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { WorkspaceAgentDetails, WorkspaceDetailTable } from "./types";
+import type { WorkspaceAgentDetails } from "./types";
 import {
   COLORS,
   bool,
@@ -87,7 +87,6 @@ function AgentDetailDashboard({ details }: { details: WorkspaceAgentDetails }) {
   const teamBuilder = record(json.teamBuilder);
   const riskInsights = record(json.riskInsights);
   const approvalDecision = record(json.approvalDecision);
-  const genericDatasetQuery = genericDatasetQueryContract(details);
 
   return (
     <div className="space-y-5">
@@ -104,8 +103,6 @@ function AgentDetailDashboard({ details }: { details: WorkspaceAgentDetails }) {
         <ResourceSupplyDashboard data={resourceSupply} />
       ) : opportunityAssessment ? (
         <OpportunityAssessmentDashboard data={opportunityAssessment} />
-      ) : genericDatasetQuery ? (
-        <GenericDatasetQueryDashboard data={genericDatasetQuery} tables={details.tables} />
       ) : (
         <UnsupportedContractDashboard />
       )}
@@ -553,109 +550,12 @@ function AgentBadge({ details }: { details: WorkspaceAgentDetails }) {
           ? "Supply"
           : json.opportunityAssessment
             ? "Demand"
-            : genericDatasetQueryContract(details)
-              ? "Query"
-              : "Tool";
+            : "Tool";
 
   return (
     <span className="rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
       {label} JSON
     </span>
-  );
-}
-
-function genericDatasetQueryContract(details: WorkspaceAgentDetails) {
-  const json = details.json;
-  const explicit = record(json.genericDatasetQuery);
-  if (explicit) return explicit;
-
-  if (text(json.queryType) && text(json.tableName)) {
-    return json;
-  }
-
-  if (details.view !== "table-query") return null;
-
-  const firstTable = details.tables[0];
-  const tableCard = details.cards.find((card) => /^(table|sheet)$/i.test(card.label));
-  const rowsCard = details.cards.find((card) => /^rows$/i.test(card.label));
-  const queryTypeCard = details.cards.find((card) => /^query type$/i.test(card.label));
-  const filterCard = details.cards.find((card) => /^filters$/i.test(card.label));
-
-  return {
-    query: details.summary,
-    queryType: queryTypeCard?.value || "list",
-    tableName: tableCard?.detail || tableCard?.value || "Dataset",
-    tableDisplayName: tableCard?.value || tableCard?.detail || "Dataset",
-    confidence: queryTypeCard?.detail || "n/a",
-    filters: filterCard?.detail && filterCard.detail !== "No filters" ? [filterCard.detail] : [],
-    totalMatchingRows: number(rowsCard?.value, firstTable?.rows.length ?? 0),
-    returnedRows: firstTable?.rows.length ?? 0,
-    headers: firstTable?.headers ?? [],
-    rows: firstTable?.rows ?? [],
-  };
-}
-
-function GenericDatasetQueryDashboard({ data, tables }: { data: AnyRecord; tables: WorkspaceDetailTable[] }) {
-  const filterRecords = records(data.filters);
-  const filterTerms = filterRecords.length
-    ? filterRecords.map((filter) => text(filter.term)).filter(Boolean)
-    : strings(data.filters);
-  const groupBy = record(data.groupBy);
-  const queryType = text(data.queryType, "list").replace("_", " ");
-  const resultTables = tables.length
-    ? tables
-    : [
-        {
-          title: "Query Results",
-          headers: strings(data.headers),
-          rows: Array.isArray(data.rows) ? (data.rows as string[][]) : [],
-        },
-      ];
-
-  return (
-    <div className="space-y-5">
-      <MetricGrid
-        items={[
-          {
-            icon: TableProperties,
-            label: "Table",
-            value: text(data.tableDisplayName, text(data.tableName, "Dataset")),
-            detail: text(data.tableName),
-          },
-          {
-            icon: SearchCheck,
-            label: "Rows",
-            value: formatNumber(number(data.totalMatchingRows)),
-            detail: `${formatNumber(number(data.returnedRows))} returned`,
-          },
-          {
-            icon: FileJson2,
-            label: "Query Type",
-            value: queryType,
-            detail: text(data.confidence, "n/a"),
-          },
-          {
-            icon: ListChecks,
-            label: "Filters",
-            value: filterTerms.length ? String(filterTerms.length) : "0",
-            detail: filterTerms.join(", ") || "No filters",
-          },
-        ]}
-      />
-      <InfoPanel
-        icon={ClipboardCheck}
-        title="Query Plan"
-        rows={[
-          ["Question", text(data.query, "n/a")],
-          ["Read Mode", "SELECT only"],
-          ["Group By", groupBy ? text(groupBy.displayName, text(groupBy.columnName)) : text(data.groupBy, "None")],
-          ["Filters", filterTerms.join(", ") || "None"],
-        ]}
-      />
-      {resultTables.map((table) => (
-        <DataTable key={table.title} title={table.title} headers={table.headers} rows={table.rows} />
-      ))}
-    </div>
   );
 }
 

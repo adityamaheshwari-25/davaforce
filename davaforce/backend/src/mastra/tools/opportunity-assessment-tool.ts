@@ -33,6 +33,36 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 const containsSignal = (haystack: string, signal: string) =>
   new RegExp(`(^|[^a-z0-9+#])${escapeRegExp(signal.toLowerCase())}([^a-z0-9+#]|$)`).test(haystack);
 
+const readRoleSkillRequirements = (
+  db: DatabaseSync,
+  roleId: string,
+  fallbackRequired: unknown,
+  fallbackDesired: unknown,
+) => {
+  const rows = all(
+    db,
+    `
+    SELECT skillName, importance
+    FROM "OpportunityRoleSkillRequirement"
+    WHERE opportunityRoleId = ?
+    ORDER BY CASE importance WHEN 'REQUIRED' THEN 0 ELSE 1 END, skillName ASC
+    `,
+    [roleId],
+  );
+
+  if (rows.length === 0) {
+    return {
+      requiredSkills: unique(splitList(fallbackRequired)),
+      desiredSkills: unique(splitList(fallbackDesired)),
+    };
+  }
+
+  return {
+    requiredSkills: unique(rows.filter((row) => text(row.importance).toLowerCase() === "required").map((row) => text(row.skillName))),
+    desiredSkills: unique(rows.filter((row) => text(row.importance).toLowerCase() !== "required").map((row) => text(row.skillName))),
+  };
+};
+
 const toOpportunity = (row: Row) => ({
   id: text(row.id),
   name: text(row.name),
@@ -52,24 +82,28 @@ const toOpportunity = (row: Row) => ({
   timezonePreference: text(row.timezonePreference),
 });
 
-const toRole = (row: Row) => ({
-  id: text(row.id),
-  opportunityId: text(row.opportunityId),
-  roleName: text(row.roleName),
-  disciplineOrDepartment: text(row.disciplineOrDepartment),
-  gradePreference: text(row.gradePreference),
-  requiredSkills: splitList(row.requiredSkillsText),
-  desiredSkills: splitList(row.desiredSkillsText),
-  domainExperienceRequired: text(row.domainExperienceRequired),
-  locationPreference: text(row.locationPreference),
-  startDate: text(row.startDate),
-  durationWeeks: numberValue(row.durationWeeks),
-  fteRequired: numberValue(row.fteRequired),
-  priority: text(row.priority),
-  flexibilityNotes: text(row.flexibilityNotes),
-  minimumIndividualFte: numberValue(row.minimumIndividualFte),
-  canCombineCandidates: Boolean(Number(row.canCombineCandidates ?? 0)),
-});
+const toRole = (db: DatabaseSync, row: Row) => {
+  const roleSkills = readRoleSkillRequirements(db, text(row.id), row.requiredSkillsText, row.desiredSkillsText);
+
+  return {
+    id: text(row.id),
+    opportunityId: text(row.opportunityId),
+    roleName: text(row.roleName),
+    disciplineOrDepartment: text(row.disciplineOrDepartment),
+    gradePreference: text(row.gradePreference),
+    requiredSkills: roleSkills.requiredSkills,
+    desiredSkills: roleSkills.desiredSkills,
+    domainExperienceRequired: text(row.domainExperienceRequired),
+    locationPreference: text(row.locationPreference),
+    startDate: text(row.startDate),
+    durationWeeks: numberValue(row.durationWeeks),
+    fteRequired: numberValue(row.fteRequired),
+    priority: text(row.priority),
+    flexibilityNotes: text(row.flexibilityNotes),
+    minimumIndividualFte: numberValue(row.minimumIndividualFte),
+    canCombineCandidates: Boolean(Number(row.canCombineCandidates ?? 0)),
+  };
+};
 
 const QUERY_STOP_WORDS = new Set([
   "and",
@@ -479,7 +513,7 @@ export function assessOpportunity(input: OpportunityAssessmentInput): Opportunit
           ORDER BY CASE priority WHEN 'High' THEN 0 ELSE 1 END, startDate ASC, id ASC
           `,
           [opportunity.id],
-        ).map(toRole)
+        ).map((row) => toRole(db, row))
       : [];
     const querySignals = extractQuerySignals(db, input.query);
 
@@ -530,6 +564,7 @@ export function assessOpportunity(input: OpportunityAssessmentInput): Opportunit
           : "No matching opportunity row was found.",
         `Query signals: ${querySignals.skills.length} skill(s), ${querySignals.locations.length} location(s), ${querySignals.roleHints.length} role hint(s).`,
         "Confirmed requirements come from selected opportunity roles; query signals are kept separate in extractedQuerySignals.",
+        "Role skills were read from OpportunityRoleSkillRequirement with text-field fallback.",
       ],
     };
   } finally {

@@ -1,7 +1,6 @@
 # Workforce SQLite Schema
 
 This project loads `input_data.xlsx` into a SQLite database at [prisma/workforce.db](/C:/Users/sgururaj/Documents/analyzexcel/prisma/workforce.db) using the Prisma schema in [prisma/schema.prisma](/C:/Users/sgururaj/Documents/analyzexcel/prisma/schema.prisma).
-
 For a deeper explanation of the modeling decisions and each table, see [docs/schema-deep-dive.md](/C:/Users/sgururaj/Documents/analyzexcel/docs/schema-deep-dive.md).
 
 ## Files

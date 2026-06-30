@@ -1291,8 +1291,7 @@ Frontend rule:
 - Attach `details` to the same assistant message.
 - Show `View details` when `detailView` and `details` are present.
 - Render the right-side workspace panel from `details.cards`, `details.charts`, and `details.tables`.
-- Supported current `detailView` values are `overview`, `staffing-fit`, `supply-risk`, `skill-gaps`, `demand`, and `table-query`.
-- Generic DB query responses return `detailView: "table-query"` and include `details.json.genericDatasetQuery`, `details.tables[0]`, query metadata cards, and raw JSON for the right-side evidence container.
+- Supported current `detailView` values are `overview`, `staffing-fit`, `supply-risk`, `skill-gaps`, and `demand`.
 - If the route cannot safely infer the target opportunity, return a clarification `message`, `needsClarification: true`, and no detail panel.
 - EWA, approval, blocker, risk-insight, and final recommendation questions require `workforceRouterTool`, `riskInsightsTool`, and `approvalDecisionTool` before the frontend should show those as supported chat paths.
 
