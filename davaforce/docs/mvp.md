@@ -192,9 +192,8 @@ Implemented runtime paths:
 | Team Builder Tool | `teamBuilderTool` | `buildTeamOptions()` is called by workspace chat or the router when team intent is selected |
 | Risk & Insights Tool | `riskInsightsTool` | `buildRiskInsights()` is called by the router when risk intent is selected |
 | Approval & Decision Tool | `approvalDecisionTool` | `buildApprovalDecision()` is called by the router when approval or EWA intent is selected |
-| Generic DB Query Tool | `genericDatasetQueryTool` | `queryGenericDataset()` answers generic read-only table questions and returns a `table-query` detail panel contract |
 
-The workspace chat API returns `detailView`, `details`, the legacy compatibility field `agentsUsed`, and routing evidence so the frontend can render the right-side tool evidence panel without relying on generic fallbacks. The `agentsUsed` field should contain `workforce-router-agent` plus selected tool IDs. Generic DB query answers use `detailView: "table-query"` and include `details.json.genericDatasetQuery`.
+The workspace chat API returns `detailView`, `details`, the legacy compatibility field `agentsUsed`, and routing evidence so the frontend can render the right-side tool evidence panel from specialist workforce tool output. The `agentsUsed` field should contain `workforce-router-agent` plus selected tool IDs.
 
 Final response wording follows an OpenAI-first, deterministic-fallback approach:
 
@@ -889,7 +888,6 @@ The end-to-end path is conditional. For example, a demand-only question can stop
 * Fall back to hardcoded deterministic tool messages when AI is unavailable or not configured
 * Return per-message detail JSON for the workspace panel
 * Render tool-specific evidence dashboards for opportunity, supply, team builder, risk, and approval contracts
-* Render generic DB query results as a tool-specific right-panel table with query metadata and raw JSON
 * Support resizable chat and evidence panels without horizontal overflow
 * Compose dependent tools synchronously when one tool needs another tool's output
 * Recommend suitable candidates based on:

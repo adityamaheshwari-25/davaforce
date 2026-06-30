@@ -40,7 +40,6 @@ export function chooseDetailView(prompt: string): DashboardView | null {
   const lower = prompt.toLowerCase();
   if (lower.includes("skill") || lower.includes("gap") || lower.includes("capability")) return "skill-gaps";
   if (lower.includes("bench") || lower.includes("available") || lower.includes("supply") || lower.includes("risk")) return "supply-risk";
-  if (lower.includes("table") || lower.includes("record") || lower.includes("count")) return "table-query";
   if (lower.includes("opportun") || lower.includes("demand") || lower.includes("role")) return "demand";
   if (lower.includes("fit") || lower.includes("candidate") || lower.includes("staff")) return "staffing-fit";
   return null;
@@ -53,7 +52,6 @@ export function detailViewLabel(view: DashboardView) {
     "supply-risk": "Supply Risk",
     "skill-gaps": "Skill Gaps",
     demand: "Demand Pipeline",
-    "table-query": "Dataset Query",
   };
   return labels[view];
 }
